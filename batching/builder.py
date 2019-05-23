@@ -7,8 +7,6 @@ import pandas as pd
 import multiprocessing as mp
 from functools import partial
 from operator import itemgetter
-import datetime
-import os
 import json
 import logging
 
@@ -29,6 +27,7 @@ class BatchMeta(object):
 class Builder(object):
     def __init__(self,
                  batch_meta,
+                 storage,
                  features,
                  look_back,
                  look_forward,
@@ -52,12 +51,10 @@ class Builder(object):
         self._logger = logging.getLogger(__name__)
 
         self._batch_meta = batch_meta
+        self._storage = storage
 
         if seed:
             np.random.seed(seed)
-
-        self._path = f"./cache/batches-{datetime.datetime.now():%Y-%m-%d-%H%M%S}/"
-        os.makedirs(self._path)
 
         self.scaler = StandardScaler()
 
@@ -142,7 +139,7 @@ class Builder(object):
             'mean': self.scaler.mean_.tolist(),
             'std': self.scaler.scale_.tolist()
         }
-        meta_file = self._path + "meta.json"
+        meta_file = f"{self._storage.directory}/meta.json"
         with open(meta_file, 'w') as outfile:
             outfile.write(json.dumps(params))
 
@@ -212,23 +209,15 @@ class Builder(object):
                                                            len(zeros) / float(len(ones) + len(zeros))))
 
             if val_cadence and self._batch_meta.sequence_number % val_cadence == 0:
-                X_file = self._path + "Xv_{}.npy".format(self._batch_meta.sequence_number)
-                y_file = self._path + "yv_{}.npy".format(self._batch_meta.sequence_number)
-                np.save(X_file, X_batch)
-                np.save(y_file, y_batch)
-
+                X_path, y_path = self._storage.save(self._batch_meta.sequence_number, X_batch, y_batch, validation=True)
                 self._batch_meta.validation.ids.append(self._batch_meta.sequence_number)
-                self._batch_meta.validation.map[self._batch_meta.sequence_number] = {"X": X_file, "y": y_file}
+                self._batch_meta.validation.map[self._batch_meta.sequence_number] = {"X": X_path, "y": y_path}
                 self._batch_meta.sequence_number += 1
                 continue
 
-            X_file = self._path + "X_{}.npy".format(self._batch_meta.sequence_number)
-            y_file = self._path + "y_{}.npy".format(self._batch_meta.sequence_number)
-            np.save(X_file, X_batch)
-            np.save(y_file, y_batch)
-
+            X_path, y_path = self._storage.save(self._batch_meta.sequence_number, X_batch, y_batch)
             self._batch_meta.train.ids.append(self._batch_meta.sequence_number)
-            self._batch_meta.train.map[self._batch_meta.sequence_number] = {"X": X_file, "y": y_file}
+            self._batch_meta.train.map[self._batch_meta.sequence_number] = {"X": X_path, "y": y_path}
             self._batch_meta.sequence_number += 1
 
         self.save_meta()
