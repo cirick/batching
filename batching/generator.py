@@ -3,9 +3,9 @@ import numpy as np
 
 
 class BatchGenerator(tf.keras.utils.Sequence):
-    def __init__(self, batch_generator, seed=None, n_classes=2):
-        self._batch_ids = batch_generator.batch_ids
-        self._batch_map = batch_generator.batch_map
+    def __init__(self, batch_meta_ids, seed=None, n_classes=2):
+        self._batch_ids = batch_meta_ids.ids
+        self._batch_map = batch_meta_ids.map
         self._n_classes = n_classes
 
         if seed:
