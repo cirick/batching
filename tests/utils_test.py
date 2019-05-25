@@ -57,3 +57,15 @@ def test_time_gaps_too_small_segments():
 
     res = split_flat_df_by_time_gaps(df, gap_seconds=1, look_back=5, look_forward=5)
     tools.eq_(len(res), 0)
+
+
+def test_time_gaps_fully_segmented():
+    n = 50
+    gap = 2
+    df = pd.DataFrame({"time": pd.to_datetime(list(range(0, n * gap, gap)), unit="s"),
+                       "A": np.random.randn(n),
+                       "B": np.random.randn(n),
+                       "y": np.random.randint(2, size=n)})
+
+    res = split_flat_df_by_time_gaps(df, gap_seconds=1, look_back=0, look_forward=0)
+    tools.eq_(len(res), n)

@@ -25,10 +25,10 @@ def split_flat_df_by_time_gaps(df, gap_seconds, look_back, look_forward):
     valid_sections = []
     for gap_idx in gap_idxs:
         end_idx = gap_idx + 1
-        if df.iloc[start_idx:end_idx].shape[0] > (look_back + look_forward + 1):
+        if df.iloc[start_idx:end_idx].shape[0] >= (look_back + look_forward + 1):
             valid_sections.append(df.iloc[start_idx:end_idx])
         start_idx = end_idx
-    if df.iloc[start_idx:].shape[0] > (look_back + look_forward + 1):
+    if df.iloc[start_idx:].shape[0] >= (look_back + look_forward + 1):
         valid_sections.append(df.iloc[start_idx:])
 
     return valid_sections
