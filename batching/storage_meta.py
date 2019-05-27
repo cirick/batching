@@ -42,6 +42,21 @@ class StorageMeta(object):
 
         return filename
 
+    def get_meta_params(self):
+        params = {
+            'train_ids': self.train.ids,
+            'train_map': self.train.map,
+            'val_ids': self.validation.ids,
+            'val_map': self.validation.map,
+        }
+        return params
+
+    def set_meta_params(self, train_ids, train_map, validation_ids, validation_map):
+        self.train.ids = train_ids
+        self.train.map = train_map
+        self.validation.ids = validation_ids
+        self.validation.map = validation_map
+
     def load(self, batch_id, validation=False):
         cur_id = self.get_ids(validation)[batch_id]
         filename = self.get_map(validation)[cur_id]

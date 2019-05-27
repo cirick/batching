@@ -4,7 +4,7 @@ from nose import tools
 
 from batching.builder import Builder
 from batching.generator import BatchGenerator
-from batching.storage import BatchStorageFile
+from batching.storage import BatchStorageMemory
 from batching.storage_meta import StorageMeta
 
 
@@ -22,7 +22,7 @@ def test_generator():
     batch_seconds = 1
 
     meta = StorageMeta()
-    storage = BatchStorageFile(meta)
+    storage = BatchStorageMemory(meta)
     batch_generator = Builder(storage, feature_set, look_back, look_forward, batch_seconds, batch_size=16)
 
     batch_generator.generate_and_save_batches(feature_df_list)

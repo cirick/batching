@@ -111,10 +111,6 @@ class Builder(object):
     def save_meta(self):
         params = {
             'batch_size': self.batch_size,
-            'train_ids': self._storage.meta.train.ids,
-            'train_map': self._storage.meta.train.map,
-            'val_ids': self._storage.meta.validation.ids,
-            'val_map': self._storage.meta.validation.map,
             'features': self._features,
             'look_forward': self._look_forward,
             'look_back': self._look_back,
@@ -122,19 +118,11 @@ class Builder(object):
             'mean': self.scaler.mean_.tolist(),
             'std': self.scaler.scale_.tolist()
         }
-        meta_file = f"{self._storage.directory}/meta.json"
-        with open(meta_file, 'w') as outfile:
-            outfile.write(json.dumps(params))
+        self._storage.save_meta(params)
 
-    def load_meta(self, meta_file_path):
-        with open(meta_file_path, 'r') as infile:
-            params = json.load(infile)
-
+    def load_meta(self):
+        params = self._storage.load_meta()
         self.batch_size = params["batch_size"]
-        self._storage.meta.train.ids = params["train_ids"]
-        self._storage.meta.train.map = {int(k): v for k, v in params["train_map"].items()}
-        self._storage.meta.validation.ids = params["val_ids"]
-        self._storage.meta.validation.map = {int(k): v for k, v in params["val_map"].items()}
         self._features = params["features"]
         self._look_forward = params["look_forward"]
         self._look_back = params["look_back"]
