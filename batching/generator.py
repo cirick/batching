@@ -2,12 +2,16 @@ import tensorflow as tf
 import numpy as np
 
 
+def to_categorical(y, n_classes):
+    return np.eye(n_classes)[y]
+
+
 class BatchGenerator(tf.keras.utils.Sequence):
-    def __init__(self, batch_meta_ids, storage, seed=None, n_classes=2):
-        self._batch_ids = batch_meta_ids.ids
-        self._batch_map = batch_meta_ids.map
+    def __init__(self, storage, is_validation, seed=None, n_classes=2):
         self._storage = storage
         self._n_classes = n_classes
+        self._batch_ids = storage.meta.get_ids(is_validation)
+        self._is_validation = is_validation
 
         if seed:
             np.random.seed(seed)
@@ -24,14 +28,10 @@ class BatchGenerator(tf.keras.utils.Sequence):
 
         # Generate indexes of the batch
         batch_idx = self.indexes[index]
-
-        X_file = self._batch_map[batch_idx]["X"]
-        y_file = self._batch_map[batch_idx]["y"]
-
-        X, y = self._storage.load(X_file, y_file)
+        X, y = self._storage.load(batch_idx, self._is_validation)
 
         if self._n_classes > 2:
-            y = tf.keras.utils.to_categorical(y, self._n_classes)
+            y = to_categorical(y, self._n_classes)
 
         return X, y
 

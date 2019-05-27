@@ -5,6 +5,8 @@ from nose import with_setup
 import os
 import shutil
 
+from batching.storage_meta import StorageMeta
+
 
 def setup_func():
     pass
@@ -16,29 +18,31 @@ def teardown_func():
 
 @with_setup(setup_func, teardown_func)
 def test_file_storage_directory():
-    storage = BatchStorageFile(directory="test")
+    meta = StorageMeta()
+    storage = BatchStorageFile(meta, directory="test")
     tools.eq_(storage.directory, "test")
     assert os.path.exists("test"), True
 
 
 @with_setup(setup_func, teardown_func)
 def test_file_storage_save():
-    storage = BatchStorageFile(directory="test")
+    meta = StorageMeta()
+    storage = BatchStorageFile(meta, directory="test")
     X = np.array([1, 2, 3])
     y = np.array([0, 0, 0])
 
-    X_filename, y_filename = storage.save(0, X, y, validation=False)
-    assert os.path.isfile(X_filename)
-    assert os.path.isfile(y_filename)
+    filename = storage.save(X, y)
+    assert os.path.isfile(filename)
 
 
 @with_setup(setup_func, teardown_func)
 def test_file_storage_load():
-    storage = BatchStorageFile(directory="test")
+    meta = StorageMeta()
+    storage = BatchStorageFile(meta, directory="test")
     X = np.array([1, 2, 3])
     y = np.array([0, 0, 0])
 
-    X_filename, y_filename = storage.save(0, X, y, validation=False)
-    X_data, y_data = storage.load(X_filename, y_filename)
+    storage.save(X, y)
+    X_data, y_data = storage.load(0)
     assert np.array_equal(X_data, X)
     assert np.array_equal(y_data, y)

@@ -11,36 +11,20 @@ import json
 import logging
 
 
-class BatchIds(object):
-    def __init__(self):
-        self.ids = list()
-        self.map = {}
-
-
-class BatchMeta(object):
-    def __init__(self):
-        self.sequence_number = 0
-        self.train = BatchIds()
-        self.validation = BatchIds()
-
-
 class Builder(object):
     def __init__(self,
-                 batch_meta,
                  storage,
                  features,
                  look_back,
                  look_forward,
                  n_seconds,
                  batch_size=8192,
-                 validation_split=0,
                  pseudo_stratify=False,
                  verbose=False,
                  seed=None):
         self.batch_size = batch_size
         self._stratify = pseudo_stratify
         self._verbose = verbose
-        self._validation_split = validation_split
 
         self._features = features
         self._look_forward = look_forward
@@ -50,7 +34,6 @@ class Builder(object):
         self._n_seconds = n_seconds
         self._logger = logging.getLogger(__name__)
 
-        self._batch_meta = batch_meta
         self._storage = storage
 
         if seed:
@@ -128,10 +111,10 @@ class Builder(object):
     def save_meta(self):
         params = {
             'batch_size': self.batch_size,
-            'train_ids': self._batch_meta.train.ids,
-            'train_map': self._batch_meta.train.map,
-            'val_ids': self._batch_meta.validation.ids,
-            'val_map': self._batch_meta.validation.map,
+            'train_ids': self._storage.meta.train.ids,
+            'train_map': self._storage.meta.train.map,
+            'val_ids': self._storage.meta.validation.ids,
+            'val_map': self._storage.meta.validation.map,
             'features': self._features,
             'look_forward': self._look_forward,
             'look_back': self._look_back,
@@ -148,10 +131,10 @@ class Builder(object):
             params = json.load(infile)
 
         self.batch_size = params["batch_size"]
-        self._batch_meta.train.ids = params["train_ids"]
-        self._batch_meta.train.map = {int(k): v for k, v in params["train_map"].items()}
-        self._batch_meta.validation.ids = params["val_ids"]
-        self._batch_meta.validation.map = {int(k): v for k, v in params["val_map"].items()}
+        self._storage.meta.train.ids = params["train_ids"]
+        self._storage.meta.train.map = {int(k): v for k, v in params["train_map"].items()}
+        self._storage.meta.validation.ids = params["val_ids"]
+        self._storage.meta.validation.map = {int(k): v for k, v in params["val_map"].items()}
         self._features = params["features"]
         self._look_forward = params["look_forward"]
         self._look_back = params["look_back"]
@@ -190,34 +173,12 @@ class Builder(object):
             y_rem = y_session[-remainder:]
 
     def generate_and_save_batches(self, session_df_list):
-        self._batch_meta.sequence_number = 0
-
         batch_generator = self._pseudo_stratify_batches if self._stratify else self.generate_batches
-
-        val_cadence = None
-        if self._validation_split > 0:
-            val_cadence = 100 / (self._validation_split * 100)
 
         for (X_batch, y_batch) in batch_generator(session_df_list):
             assert X_batch.shape[0] == self.batch_size
             assert y_batch.shape[0] == self.batch_size
 
-            ones = np.where(y_batch == 1)[0]
-            zeros = np.where(y_batch == 0)[0]
-            if self._verbose:
-                self._logger.debug("{}|b[{},{}]={}".format(self._batch_meta.sequence_number, len(ones), len(zeros),
-                                                           len(zeros) / float(len(ones) + len(zeros))))
-
-            if val_cadence and self._batch_meta.sequence_number % val_cadence == 0:
-                X_path, y_path = self._storage.save(self._batch_meta.sequence_number, X_batch, y_batch, validation=True)
-                self._batch_meta.validation.ids.append(self._batch_meta.sequence_number)
-                self._batch_meta.validation.map[self._batch_meta.sequence_number] = {"X": X_path, "y": y_path}
-                self._batch_meta.sequence_number += 1
-                continue
-
-            X_path, y_path = self._storage.save(self._batch_meta.sequence_number, X_batch, y_batch)
-            self._batch_meta.train.ids.append(self._batch_meta.sequence_number)
-            self._batch_meta.train.map[self._batch_meta.sequence_number] = {"X": X_path, "y": y_path}
-            self._batch_meta.sequence_number += 1
+            self._storage.save(X_batch, y_batch)
 
         self.save_meta()
