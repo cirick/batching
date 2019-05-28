@@ -58,6 +58,5 @@ class StorageMeta(object):
         self.validation.map = validation_map
 
     def load(self, batch_id, validation=False):
-        cur_id = self.get_ids(validation)[batch_id]
-        filename = self.get_map(validation)[cur_id]
+        filename = self.get_map(validation)[batch_id]
         return filename

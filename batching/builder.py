@@ -7,7 +7,6 @@ import pandas as pd
 import multiprocessing as mp
 from functools import partial
 from operator import itemgetter
-import json
 import logging
 
 
@@ -42,11 +41,11 @@ class Builder(object):
         self.scaler = StandardScaler()
 
     @staticmethod
-    def _remove_false_anchors(series):
-        anchors = series.rolling(3).apply(lambda x: x[0] == 0 and x[1] == 1 and x[2] == 0, raw=True)
-        anchors_idx = np.where(anchors.values == 1)[0] - 1
-        series.iloc[anchors_idx] = 0
-        return series
+    def _remove_false_anchors(df, label):
+        anchors = df[label].rolling(3).apply(lambda x: x[0] == 0 and x[1] == 1 and x[2] == 0, raw=True)
+        anchors_idx = (np.where(anchors.values == 1)[0] - 1).tolist()
+        df.loc[anchors_idx, label] = 0
+        return df[label]
 
     def _nn_input_from_sessions(self, session_df):
         valid_chunks = split_flat_df_by_time_gaps(session_df, self._n_seconds, self._look_back, self._look_forward)
@@ -63,12 +62,12 @@ class Builder(object):
     def _scale_and_transform_session(self, session_df):
         session_df = session_df.dropna()
         session_df.loc[:, self._features] = self.scaler.transform(session_df[self._features])
-        session_df.loc[:, "y"] = self._remove_false_anchors(session_df["y"])
+        session_df["y"] = self._remove_false_anchors(session_df, "y")
         return self._nn_input_from_sessions(session_df)
 
     def _generate_session_sequences(self, session_df_list):
         with mp.pool.ThreadPool(mp.cpu_count()) as pool:
-            for result in pool.imap_unordered(self._scale_and_transform_session, session_df_list, chunksize=3):
+            for result in pool.imap_unordered(self._scale_and_transform_session, session_df_list):
                 yield result
 
     def _imbalanced_minibatch_generator(self, X, y):

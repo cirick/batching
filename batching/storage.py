@@ -39,7 +39,7 @@ class BatchStorageMemory(BatchStorage):
         self._data = {}
         self.meta_data = None
 
-    def save(self, X_batch, y_batch, validation=False):
+    def save(self, X_batch, y_batch):
         filename = self.meta.save()
         self._data[filename] = {"features": X_batch, "labels": y_batch}
         return filename
@@ -127,19 +127,40 @@ class BatchStorageS3(BatchStorage):
         self._validation_tag = validation_tag
 
     def save(self, X_batch, y_batch):
-        X_path, y_path = self.meta.save()
-        np.savez(X_path, features=X_batch, labels=y_batch)
-        self._bucket.upload_file(Filename=X_path, Key=seconds_key)
+        filename = self.meta.save()
+        file_location = f"{filename}.npz"
+        np.savez(file_location, features=X_batch, labels=y_batch)
 
-        self.meta.save(X_path, y_path)
+        self._bucket.upload_file(Filename=file_location, Key=f"{self._prefix}/{filename}")
+
+    def save_meta(self, params):
+        meta_params = self.meta.get_meta_params()
+        params.update(meta_params)
+        with open("meta.json", 'w') as outfile:
+            outfile.write(json.dumps(params))
+
+        self._bucket.upload_file(Filename="meta.json", Key=f"{self._prefix}/meta.json")
+
+    def load_meta(self):
+        self._bucket.download_file(Key=f"{self._prefix}/meta.json", Filename="meta.json")
+
+        with open(f"meta.json", 'r') as infile:
+            params = json.load(infile)
+
+        params["train_map"] = {int(k): v for k, v in params["train_map"].items()}
+        params["val_map"] = {int(k): v for k, v in params["val_map"].items()}
+        self.meta.set_meta_params(train_ids=params["train_ids"],
+                                  train_map=params["train_map"],
+                                  validation_ids=params["val_ids"],
+                                  validation_map=params["val_map"])
+        return params
 
     def load(self, batch_id, validation=False):
-        X_path, y_path = self.meta.load(batch_id, validation)
+        filename = self.meta.load(batch_id, validation)
 
-        self._bucket.download_file(Key=seconds_key, Filename=X_path)
-        self._bucket.download_file(Key=seconds_key, Filename=y_path)
+        self._bucket.download_file(Key=f"{self._prefix}/{filename}", Filename=filename)
 
-        data = np.load(X_path)
+        data = np.load(filename)
         X = data["features"]
         y = data["labels"]
 

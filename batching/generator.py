@@ -27,8 +27,8 @@ class BatchGenerator(tf.keras.utils.Sequence):
         """Generate one batch of data"""
 
         # Generate indexes of the batch
-        batch_idx = self.indexes[index]
-        X, y = self._storage.load(batch_idx, self._is_validation)
+        batch_id = self.indexes[index]
+        X, y = self._storage.load(batch_id, self._is_validation)
 
         if self._n_classes > 2:
             y = to_categorical(y, self._n_classes)
