@@ -21,6 +21,7 @@ setup(
         "pandas>=0.24.2",
         "scikit-learn>=0.21.2",
         "tensorflow>=1.13.1",
+        "boto3>=1.9.156"
     ],
     zip_safe=False,
 )
