@@ -2,10 +2,10 @@ from setuptools import setup
 
 setup(
     name="batching",
-    version="0.0.1",
+    version="0.0.2",
     description="Batching is a set of tools to format data for training sequence models",
-    url="https://github.com/cirick",
-    download_url="https://github.com/cirick/batching/archive/v0.0.1.tar.gz",
+    url="https://github.com/cirick/batching",
+    download_url="https://github.com/cirick/batching/archive/v0.0.2.tar.gz",
     author="Charles Irick",
     author_email="cirick@gmail.com",
     include_package_data=True,
