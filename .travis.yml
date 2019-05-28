@@ -8,3 +8,4 @@ install:
 
 script:
   - nosetests --with-coverage --cover-package=batching
+  - coveralls
