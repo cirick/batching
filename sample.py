@@ -8,7 +8,7 @@ import numpy as np
 import time
 import logging
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 feature_set = sorted(["A", "B"])
 

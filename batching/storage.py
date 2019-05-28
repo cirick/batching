@@ -6,6 +6,7 @@ import json
 import numpy as np
 import boto3
 from botocore.exceptions import ClientError
+import tempfile
 
 
 class BatchStorage(ABC):
@@ -136,27 +137,26 @@ class BatchStorageS3(BatchStorage):
 
     def save(self, X_batch, y_batch):
         filename = self.meta.save()
-        file_location = f"{filename}.npz"
-        np.savez(file_location, features=X_batch, labels=y_batch)
+        with tempfile.NamedTemporaryFile() as f:
+            np.savez(f, features=X_batch, labels=y_batch)
 
-        self._bucket.upload_file(Filename=file_location, Key=f"{self._prefix}/{filename}")
+            self._bucket.upload_file(Filename=f.name, Key=f"{self._prefix}/{filename}.npz")
 
     def save_meta(self, params):
         meta_params = self.meta.get_meta_params()
         params.update(meta_params)
-        with open("meta.json", 'w') as outfile:
-            outfile.write(json.dumps(params))
-
-        self._bucket.upload_file(Filename="meta.json", Key=f"{self._prefix}/meta.json")
+        with tempfile.NamedTemporaryFile() as f:
+            f.write(json.dumps(params).encode("utf-8"))
+            self._bucket.upload_file(Filename=f.name, Key=f"{self._prefix}/meta.json")
 
     def load_meta(self):
         try:
-            self._bucket.download_file(Key=f"{self._prefix}/meta.json", Filename="meta.json")
+            with tempfile.NamedTemporaryFile() as f:
+                self._bucket.download_file(Key=f"{self._prefix}/meta.json", Filename=f.name)
+                with open(f.name, 'r') as infile:
+                    params = json.load(infile)
         except ClientError:
             raise NoSavedMetaData()
-
-        with open(f"meta.json", 'r') as infile:
-            params = json.load(infile)
 
         params["train_map"] = {int(k): v for k, v in params["train_map"].items()}
         params["val_map"] = {int(k): v for k, v in params["val_map"].items()}
@@ -168,10 +168,9 @@ class BatchStorageS3(BatchStorage):
 
     def load(self, batch_id, validation=False):
         filename = self.meta.load(batch_id, validation)
-
-        self._bucket.download_file(Key=f"{self._prefix}/{filename}", Filename=filename)
-
-        data = np.load(filename)
+        with tempfile.NamedTemporaryFile() as f:
+            self._bucket.download_file(Key=f"{self._prefix}/{filename}.npz", Filename=f.name)
+            data = np.load(f.name)
         X = data["features"]
         y = data["labels"]
 
