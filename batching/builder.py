@@ -19,10 +19,12 @@ class Builder(object):
                  n_seconds,
                  batch_size=8192,
                  pseudo_stratify=False,
+                 stratify_nbatch_groupings=50,
                  verbose=False,
                  seed=None):
         self.batch_size = batch_size
         self._stratify = pseudo_stratify
+        self._stratify_max_groupings = stratify_nbatch_groupings
         self._verbose = verbose
 
         self._features = features
@@ -90,13 +92,11 @@ class Builder(object):
         X_group, y_group = [], []
 
         group_count = 0
-        # RAM constraint - groupings of 25 for batch size 8192 has been reasonable hence 200,000
-        max_groupings = int(100000 // self.batch_size)
         for (X_batch, y_batch) in self.generate_batches(session_df_list):
             X_group.append(X_batch)
             y_group.append(y_batch)
             group_count += 1
-            if group_count >= max_groupings:
+            if group_count >= self._stratify_max_groupings:
                 for (X_balanced, y_balanced) in self._imbalanced_minibatch_generator(np.concatenate(X_group, axis=0),
                                                                                      np.concatenate(y_group, axis=0)):
                     yield (X_balanced, y_balanced)

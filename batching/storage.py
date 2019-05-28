@@ -5,6 +5,7 @@ import datetime
 import json
 import numpy as np
 import boto3
+from botocore.exceptions import ClientError
 
 
 class BatchStorage(ABC):
@@ -17,19 +18,24 @@ class BatchStorage(ABC):
 
     @abstractmethod
     def save(self, X_batch, y_batch):
-        raise NotImplementedError
+        pass
 
     @abstractmethod
     def load(self, batch_id, validation=False):
-        raise NotImplementedError
+        pass
 
     @abstractmethod
     def save_meta(self, params):
-        raise NotImplementedError
+        pass
 
     @abstractmethod
     def load_meta(self):
-        raise NotImplementedError
+        pass
+
+
+class NoSavedMetaData(Exception):
+    def __init__(self):
+        Exception.__init__(self, "No saved meta data. Need to call save_meta")
 
 
 class BatchStorageMemory(BatchStorage):
@@ -51,7 +57,7 @@ class BatchStorageMemory(BatchStorage):
 
     def load_meta(self):
         if self.meta_data is None:
-            raise Exception("No saved metadata")
+            raise NoSavedMetaData()
 
         params = self.meta_data
         params["train_map"] = {int(k): v for k, v in params["train_map"].items()}
@@ -98,8 +104,11 @@ class BatchStorageFile(BatchStorage):
             outfile.write(json.dumps(params))
 
     def load_meta(self):
-        with open(f"{self._path}/meta.json", 'r') as infile:
-            params = json.load(infile)
+        try:
+            with open(f"{self._path}/meta.json", 'r') as infile:
+                params = json.load(infile)
+        except FileNotFoundError:
+            raise NoSavedMetaData()
 
         params["train_map"] = {int(k): v for k, v in params["train_map"].items()}
         params["val_map"] = {int(k): v for k, v in params["val_map"].items()}
@@ -119,10 +128,9 @@ class BatchStorageFile(BatchStorage):
 
 
 class BatchStorageS3(BatchStorage):
-    def __init__(self, batch_meta, s3_bucket, s3_prefix="", validation_tag="v"):
+    def __init__(self, batch_meta, s3_bucket_resource, s3_prefix="", validation_tag="v"):
         super().__init__(batch_meta)
-        s3 = boto3.resource("s3", region_name="us-east-1")
-        self._bucket = s3.Bucket(s3_bucket)
+        self._bucket = s3_bucket_resource
         self._prefix = s3_prefix
         self._validation_tag = validation_tag
 
@@ -142,7 +150,10 @@ class BatchStorageS3(BatchStorage):
         self._bucket.upload_file(Filename="meta.json", Key=f"{self._prefix}/meta.json")
 
     def load_meta(self):
-        self._bucket.download_file(Key=f"{self._prefix}/meta.json", Filename="meta.json")
+        try:
+            self._bucket.download_file(Key=f"{self._prefix}/meta.json", Filename="meta.json")
+        except ClientError:
+            raise NoSavedMetaData()
 
         with open(f"meta.json", 'r') as infile:
             params = json.load(infile)
@@ -165,3 +176,11 @@ class BatchStorageS3(BatchStorage):
         y = data["labels"]
 
         return X, y
+
+    @staticmethod
+    def from_config(batch_meta, bucket_name, region="us-east-1", s3_prefix="", validation_tag="v"):
+        s3_bucket_resource = boto3.resource("s3", region_name=region).Bucket(bucket_name)
+        return BatchStorageS3(batch_meta=batch_meta,
+                              s3_bucket_resource=s3_bucket_resource,
+                              s3_prefix=s3_prefix,
+                              validation_tag=validation_tag)

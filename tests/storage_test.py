@@ -1,9 +1,11 @@
-from batching.storage import BatchStorageFile, BatchStorageMemory
+from batching.storage import BatchStorageFile, BatchStorageMemory, NoSavedMetaData, BatchStorageS3
 import numpy as np
 import nose.tools as tools
 from nose import with_setup
 import os
 import shutil
+import boto3
+from moto import mock_s3
 
 from batching.storage_meta import StorageMeta
 
@@ -98,6 +100,21 @@ def test_file_storage_load():
     assert np.array_equal(y_data, y)
 
 
+@mock_s3
+def test_storage_s3():
+    conn = boto3.resource("s3", region_name="us-east-1")
+    conn.create_bucket(Bucket="test_bucket")
+    storage = BatchStorageS3(StorageMeta(), conn.Bucket("test_bucket"), "test")
+
+    X = np.array([1, 2, 3])
+    y = np.array([0, 0, 0])
+
+    storage.save(X, y)
+    X_data, y_data = storage.load(0)
+    assert np.array_equal(X_data, X)
+    assert np.array_equal(y_data, y)
+
+
 @with_setup(setup_func, teardown_func)
 def test_file_storage_metadata():
     meta = StorageMeta()
@@ -126,3 +143,22 @@ def test_file_storage_metadata_val():
     assert len(params["val_ids"]) == 1
     assert params["val_map"][params["val_ids"][0]] == "IDv_0"
     assert len(params["train_ids"]) == 0
+
+
+@tools.raises(NoSavedMetaData)
+def test_load_empty_meta():
+    BatchStorageMemory(StorageMeta()).load_meta()
+
+
+@tools.raises(NoSavedMetaData)
+def test_load_empty_meta():
+    BatchStorageFile(StorageMeta()).load_meta()
+
+
+@mock_s3
+@tools.raises(NoSavedMetaData)
+def test_load_empty_meta():
+    conn = boto3.resource("s3", region_name="us-east-1")
+    conn.create_bucket(Bucket="test_bucket")
+
+    BatchStorageS3(StorageMeta(), conn.Bucket("test_bucket")).load_meta()
