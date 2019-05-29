@@ -10,3 +10,10 @@ script:
   - nosetests --with-coverage --cover-package=batching
 after_success:
   - coveralls
+deploy:
+  provider: pypi
+  user: "cirick"
+  password: $PYPI_PASS
+  on:
+    branch: master
+  skip_existing: true

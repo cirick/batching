@@ -145,19 +145,37 @@ def test_file_storage_metadata_val():
     assert len(params["train_ids"]) == 0
 
 
+@mock_s3
+def test_s3_storage_metadata():
+    conn = boto3.resource("s3", region_name="us-east-1")
+    conn.create_bucket(Bucket="test_bucket")
+
+    meta = StorageMeta()
+    storage = BatchStorageS3.from_config(meta, "test_bucket", s3_prefix="test")
+    X = np.array([1, 2, 3])
+    y = np.array([0, 0, 0])
+
+    storage.save(X, y)
+    storage.save_meta({})
+    params = storage.load_meta()
+    assert len(params["train_ids"]) == 1
+    assert params["train_map"][params["train_ids"][0]] == "ID_0"
+    assert len(params["val_ids"]) == 0
+
+
 @tools.raises(NoSavedMetaData)
 def test_load_empty_meta():
     BatchStorageMemory(StorageMeta()).load_meta()
 
 
 @tools.raises(NoSavedMetaData)
-def test_load_empty_meta():
-    BatchStorageFile(StorageMeta()).load_meta()
+def test_load_empty_file_meta():
+    BatchStorageFile(StorageMeta(), directory="test").load_meta()
 
 
 @mock_s3
 @tools.raises(NoSavedMetaData)
-def test_load_empty_meta():
+def test_load_empty_s3_meta():
     conn = boto3.resource("s3", region_name="us-east-1")
     conn.create_bucket(Bucket="test_bucket")
 

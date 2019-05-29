@@ -18,6 +18,7 @@ class Builder(object):
                  look_forward,
                  n_seconds,
                  batch_size=8192,
+                 normalize=True,
                  pseudo_stratify=False,
                  stratify_nbatch_groupings=50,
                  verbose=False,
@@ -34,6 +35,7 @@ class Builder(object):
         self._n_features = len(features)
         self._n_seconds = n_seconds
         self._logger = logging.getLogger(__name__)
+        self._normalize = normalize
 
         self._storage = storage
 
@@ -46,8 +48,7 @@ class Builder(object):
     def _remove_false_anchors(df, label):
         anchors = df[label].rolling(3).apply(lambda x: x[0] == 0 and x[1] == 1 and x[2] == 0, raw=True)
         anchors_idx = (np.where(anchors.values == 1)[0] - 1).tolist()
-        df.loc[anchors_idx, label] = 0
-        return df[label]
+        df.iloc[anchors_idx, df.columns.get_loc("y")] = 0
 
     def _nn_input_from_sessions(self, session_df):
         valid_chunks = split_flat_df_by_time_gaps(session_df, self._n_seconds, self._look_back, self._look_forward)
@@ -63,8 +64,10 @@ class Builder(object):
 
     def _scale_and_transform_session(self, session_df):
         session_df = session_df.dropna()
-        session_df.loc[:, self._features] = self.scaler.transform(session_df[self._features])
-        session_df["y"] = self._remove_false_anchors(session_df, "y")
+        if self._normalize:
+            session_df.loc[:, self._features] = self.scaler.transform(session_df[self._features])
+
+        self._remove_false_anchors(session_df, "y")
         return self._nn_input_from_sessions(session_df)
 
     def _generate_session_sequences(self, session_df_list):
@@ -114,8 +117,9 @@ class Builder(object):
             'look_forward': self._look_forward,
             'look_back': self._look_back,
             'seconds_per_batch': self._n_seconds,
-            'mean': self.scaler.mean_.tolist(),
-            'std': self.scaler.scale_.tolist()
+            'normalized':  self._normalize,
+            'mean': self.scaler.mean_.tolist() if self._normalize else [0] * len(self._features),
+            'std': self.scaler.scale_.tolist() if self._normalize else [1] * len(self._features),
         }
         self._storage.save_meta(params)
 
@@ -126,17 +130,22 @@ class Builder(object):
         self._look_forward = params["look_forward"]
         self._look_back = params["look_back"]
         self._n_seconds = params["seconds_per_batch"]
+        self._normalize = params.get("normalized", True)
         self.scaler.mean_ = np.array(params["mean"])
         self.scaler.scale_ = np.array(params["std"])
 
     def generate_batches(self, session_df_list):
         if self._verbose:
-            self._logger.info("Scaling data")
+            self._logger.info("Creating dataset")
         scale_df = pd.concat(session_df_list, axis=0, ignore_index=True).dropna()
 
         if self._verbose:
             self._logger.info("Total dataset shape {}".format(scale_df.shape))
-        self.scaler.fit(scale_df[self._features])
+
+        if self._normalize:
+            if self._verbose:
+                self._logger.info("Scaling data")
+            self.scaler.fit(scale_df[self._features])
 
         X_rem = np.array([]).reshape((0, self._n_timesteps, self._n_features))
         y_rem = np.array([])

@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 import time
 import logging
+import datetime
 
 logging.basicConfig(level=logging.INFO)
 
@@ -18,11 +19,13 @@ batch_seconds = 1
 n = 10000
 m = 1000
 
-feature_df_list = [pd.DataFrame({"time": pd.to_datetime(list(range(0, n * batch_seconds, batch_seconds)), unit="s"),
-                                 "A": np.random.randn(n),
-                                 "B": np.random.randn(n),
-                                 "y": np.random.randint(2, size=n)})
-                   for i in range(m)]
+now = int(datetime.datetime.timestamp(datetime.datetime.now()))
+feature_df_list = [pd.DataFrame({
+    "time": pd.to_datetime(list(range(now, now + (n * batch_seconds), batch_seconds)), unit="s"),
+    "A": np.random.randn(n),
+    "B": np.random.randn(n),
+    "y": np.random.randint(2, size=n)
+}) for i in range(m)]
 
 storage_meta = StorageMeta(validation_split=0.5)
 storage = BatchStorageMemory(storage_meta)

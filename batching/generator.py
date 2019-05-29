@@ -3,11 +3,11 @@ import numpy as np
 
 
 def to_categorical(y, n_classes):
-    return np.eye(n_classes)[y]
+    return np.eye(n_classes)[y.astype(int)]
 
 
 class BatchGenerator(tf.keras.utils.Sequence):
-    def __init__(self, storage, is_validation, seed=None, n_classes=2):
+    def __init__(self, storage, is_validation, seed=None, n_classes=1):
         self._storage = storage
         self._n_classes = n_classes
         self._batch_ids = storage.meta.get_ids(is_validation)
@@ -30,7 +30,7 @@ class BatchGenerator(tf.keras.utils.Sequence):
         batch_id = self.indexes[index]
         X, y = self._storage.load(batch_id, self._is_validation)
 
-        if self._n_classes > 2:
+        if self._n_classes > 1:
             y = to_categorical(y, self._n_classes)
 
         return X, y

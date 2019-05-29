@@ -102,7 +102,7 @@ class BatchStorageFile(BatchStorage):
         meta_params = self.meta.get_meta_params()
         params.update(meta_params)
         with open(f"{self._path}/meta.json", 'w') as outfile:
-            outfile.write(json.dumps(params))
+            json.dump(params, outfile)
 
     def load_meta(self):
         try:
@@ -146,7 +146,8 @@ class BatchStorageS3(BatchStorage):
         meta_params = self.meta.get_meta_params()
         params.update(meta_params)
         with tempfile.NamedTemporaryFile() as f:
-            f.write(json.dumps(params).encode("utf-8"))
+            with open(f.name, 'w') as outfile:
+                json.dump(params, outfile)
             self._bucket.upload_file(Filename=f.name, Key=f"{self._prefix}/meta.json")
 
     def load_meta(self):
