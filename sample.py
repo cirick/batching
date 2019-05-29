@@ -27,8 +27,7 @@ feature_df_list = [pd.DataFrame({
     "y": np.random.randint(2, size=n)
 }) for i in range(m)]
 
-storage_meta = StorageMeta(validation_split=0.5)
-storage = BatchStorageMemory(storage_meta)
+storage = BatchStorageMemory(StorageMeta(validation_split=0.5))
 batch_generator = Builder(storage, feature_set, look_back, look_forward, batch_seconds, batch_size=4096,
                           pseudo_stratify=True, verbose=True, seed=42)
 start = time.perf_counter()

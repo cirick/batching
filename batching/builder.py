@@ -8,6 +8,7 @@ import multiprocessing as mp
 from functools import partial
 from operator import itemgetter
 import logging
+import time
 
 
 class Builder(object):
@@ -171,10 +172,21 @@ class Builder(object):
     def generate_and_save_batches(self, session_df_list):
         batch_generator = self._pseudo_stratify_batches if self._stratify else self.generate_batches
 
+        if self._verbose:
+            perf_interval = 1
+            start = time.perf_counter()
+
         for (X_batch, y_batch) in batch_generator(session_df_list):
             assert X_batch.shape[0] == self.batch_size
             assert y_batch.shape[0] == self.batch_size
 
             self._storage.save(X_batch, y_batch)
+            if self._verbose:
+                if perf_interval > 50:
+                    self._logger.info("Batch production rate: {} batches/s".format(
+                        round(50 / (time.perf_counter() - start), 2)))
+                    start = time.perf_counter()
+                    perf_interval = 0
+                perf_interval += 1
 
         self.save_meta()
