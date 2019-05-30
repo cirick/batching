@@ -27,7 +27,11 @@ feature_df_list = [pd.DataFrame({
     "y": np.random.randint(2, size=n)
 }) for i in range(m)]
 
-storage = BatchStorageMemory(StorageMeta(validation_split=0.5))
+storage_meta = StorageMeta(validation_split=0.5)
+
+storage = BatchStorageMemory(storage_meta)
+# storage = BatchStorageFile(storage_meta, directory="test")
+# storage = BatchStorageS3.from_config(storage_meta, "mybucket", s3_prefix="test")
 batch_generator = Builder(storage, feature_set, look_back, look_forward, batch_seconds, batch_size=4096,
                           pseudo_stratify=True, verbose=True, seed=42)
 start = time.perf_counter()

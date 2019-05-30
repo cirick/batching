@@ -5,8 +5,8 @@ import numpy as np
 import pandas as pd
 
 import multiprocessing as mp
-from functools import partial
-from operator import itemgetter
+from functools import partial, reduce
+from operator import itemgetter, add
 import logging
 import time
 
@@ -66,7 +66,7 @@ class Builder(object):
     def _scale_and_transform_session(self, session_df):
         session_df = session_df.dropna()
         if self._normalize:
-            session_df.loc[:, self._features] = self.scaler.transform(session_df[self._features])
+            session_df.loc[:, self._features] = self.scaler.transform(session_df[self._features].astype('float64'))
 
         self._remove_false_anchors(session_df, "y")
         return self._nn_input_from_sessions(session_df)
@@ -118,7 +118,7 @@ class Builder(object):
             'look_forward': self._look_forward,
             'look_back': self._look_back,
             'seconds_per_batch': self._n_seconds,
-            'normalized':  self._normalize,
+            'normalized': self._normalize,
             'mean': self.scaler.mean_.tolist() if self._normalize else [0] * len(self._features),
             'std': self.scaler.scale_.tolist() if self._normalize else [1] * len(self._features),
         }
@@ -135,18 +135,24 @@ class Builder(object):
         self.scaler.mean_ = np.array(params["mean"])
         self.scaler.scale_ = np.array(params["std"])
 
-    def generate_batches(self, session_df_list):
+    def _normalize_dataset(self, session_df_list):
         if self._verbose:
-            self._logger.info("Creating dataset")
-        scale_df = pd.concat(session_df_list, axis=0, ignore_index=True).dropna()
+            self._logger.info("Scaling data")
+        for session in session_df_list:
+            self.scaler.partial_fit(session[self._features].astype('float64'))
+
+    def generate_batches(self, session_df_list):
+        if not session_df_list or len(session_df_list) == 0:
+            raise Exception("No dataset provided")
 
         if self._verbose:
-            self._logger.info("Total dataset shape {}".format(scale_df.shape))
+            first = session_df_list[0].shape
+            total = reduce(add, [s.shape[0] for s in session_df_list])
+            dataset_shape = (total,) + first[1:]
+            self._logger.info(f"Total dataset shape {dataset_shape}")
 
         if self._normalize:
-            if self._verbose:
-                self._logger.info("Scaling data")
-            self.scaler.fit(scale_df[self._features])
+            self._normalize_dataset(session_df_list)
 
         X_rem = np.array([]).reshape((0, self._n_timesteps, self._n_features))
         y_rem = np.array([])

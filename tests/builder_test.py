@@ -2,10 +2,18 @@ import pandas as pd
 import numpy as np
 from nose import tools
 import datetime
+from functools import reduce
+from operator import add
 
 from batching.builder import Builder
 from batching.storage import BatchStorageMemory
 from batching.storage_meta import StorageMeta
+
+
+@tools.raises(Exception)
+def test_no_dataset():
+    batch_generator = Builder(BatchStorageMemory(StorageMeta()), [], 0, 0, 1)
+    batch_generator.generate_and_save_batches([])
 
 
 def test_builder_config():
@@ -127,6 +135,36 @@ def test_remove_anchors():
     assert df["y"].any()
     batch_generator._remove_false_anchors(df, "y")
     assert not df["y"].any()
+
+
+def test_normalize_on():
+    feature_df_list = reduce(add, [[pd.DataFrame({"time": pd.to_datetime(list(range(50)), unit="s"),
+                                                  "A": range(1, 51),
+                                                  "B": range(101, 151),
+                                                  "y": np.ones(50)}),
+                                    pd.DataFrame({"time": pd.to_datetime(list(range(50)), unit="s"),
+                                                  "A": range(51, 101),
+                                                  "B": range(151, 201),
+                                                  "y": np.ones(50)})]
+                                   for _ in range(5)], [])
+
+    meta = StorageMeta()
+    storage = BatchStorageMemory(meta)
+    batch_generator = Builder(storage,
+                              features=["A", "B"],
+                              look_back=0, look_forward=0, n_seconds=1, batch_size=10,
+                              normalize=True,
+                              pseudo_stratify=False)
+
+    batch_generator.generate_and_save_batches(feature_df_list)
+
+    tools.assert_almost_equal(batch_generator.scaler.mean_[0], 50, delta=1)
+    tools.assert_almost_equal(batch_generator.scaler.mean_[1], 150, delta=1)
+
+    for batch in storage._data.values():
+        # all batches have monotonically increasing numbers (range used to create data)
+        assert np.diff(batch["features"][:, 0, 0]).all()  # feature A
+        assert np.diff(batch["features"][:, 0, 1]).all()  # feature B
 
 
 def test_normalize_off():
