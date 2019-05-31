@@ -2,7 +2,8 @@ from .utils import feature_df_to_nn_input, split_flat_df_by_time_gaps
 
 from sklearn.preprocessing import StandardScaler
 import numpy as np
-import pandas as pd
+from itertools import islice, chain
+from concurrent.futures import ThreadPoolExecutor
 
 import multiprocessing as mp
 from functools import partial, reduce
@@ -23,7 +24,8 @@ class Builder(object):
                  pseudo_stratify=False,
                  stratify_nbatch_groupings=50,
                  verbose=False,
-                 seed=None):
+                 seed=None,
+                 n_workers=None):
         self.batch_size = batch_size
         self._stratify = pseudo_stratify
         self._stratify_max_groupings = stratify_nbatch_groupings
@@ -37,6 +39,7 @@ class Builder(object):
         self._n_seconds = n_seconds
         self._logger = logging.getLogger(__name__)
         self._normalize = normalize
+        self._n_workers = n_workers
 
         self._storage = storage
 
@@ -72,8 +75,10 @@ class Builder(object):
         return self._nn_input_from_sessions(session_df)
 
     def _generate_session_sequences(self, session_df_list):
-        with mp.pool.ThreadPool(mp.cpu_count()) as pool:
-            for result in pool.imap_unordered(self._scale_and_transform_session, session_df_list):
+        n_chunks = 50
+        chunks = map(lambda i: islice(session_df_list, i, i + n_chunks), range(0, len(session_df_list), n_chunks))
+        with ThreadPoolExecutor(max_workers=self._n_workers) as p:
+            for result in chain.from_iterable(map(lambda s: p.map(self._scale_and_transform_session, s), chunks)):
                 yield result
 
     def _imbalanced_minibatch_generator(self, X, y):

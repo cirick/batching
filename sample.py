@@ -16,7 +16,7 @@ feature_set = sorted(["A", "B"])
 look_back = 10
 look_forward = 10
 batch_seconds = 1
-n = 10000
+n = 100000
 m = 1000
 
 now = int(datetime.datetime.timestamp(datetime.datetime.now()))
@@ -29,8 +29,8 @@ feature_df_list = [pd.DataFrame({
 
 storage_meta = StorageMeta(validation_split=0.5)
 
-storage = BatchStorageMemory(storage_meta)
-# storage = BatchStorageFile(storage_meta, directory="test")
+# storage = BatchStorageMemory(storage_meta)
+storage = BatchStorageFile(storage_meta, directory="test")
 # storage = BatchStorageS3.from_config(storage_meta, "mybucket", s3_prefix="test")
 batch_generator = Builder(storage, feature_set, look_back, look_forward, batch_seconds, batch_size=4096,
                           pseudo_stratify=True, verbose=True, seed=42)
