@@ -53,6 +53,7 @@ class Builder(object):
         anchors = df[label].rolling(3).apply(lambda x: x[0] == 0 and x[1] == 1 and x[2] == 0, raw=True)
         anchors_idx = (np.where(anchors.values == 1)[0] - 1).tolist()
         df.iloc[anchors_idx, df.columns.get_loc("y")] = 0
+        return df
 
     def _nn_input_from_sessions(self, session_df):
         valid_chunks = split_flat_df_by_time_gaps(session_df, self._n_seconds, self._look_back, self._look_forward)
@@ -67,12 +68,12 @@ class Builder(object):
         return train_data, train_truth
 
     def _scale_and_transform_session(self, session_df):
-        session_df = session_df.dropna()
+        clean_df = session_df.dropna().copy()
         if self._normalize:
-            session_df.loc[:, self._features] = self.scaler.transform(session_df[self._features].astype('float64'))
+            clean_df.loc[:, self._features] = self.scaler.transform(clean_df[self._features].astype('float64'))
 
-        self._remove_false_anchors(session_df, "y")
-        return self._nn_input_from_sessions(session_df)
+        clean_df = self._remove_false_anchors(clean_df, "y")
+        return self._nn_input_from_sessions(clean_df)
 
     def _generate_session_sequences(self, session_df_list):
         n_chunks = 50
