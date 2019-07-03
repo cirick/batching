@@ -1,85 +1,52 @@
-from .utils import feature_df_to_nn_input, split_flat_df_by_time_gaps
-
-from sklearn.preprocessing import StandardScaler
 import numpy as np
 from itertools import islice, chain
 from concurrent.futures import ThreadPoolExecutor
 
-import multiprocessing as mp
-from functools import partial, reduce
-from operator import itemgetter, add
+from functools import reduce
+from operator import add
 import logging
 import time
+
+from batching.storage import BatchStorageFile, BatchStorageMemory, BatchStorageS3
+from batching.storage_meta import StorageMeta
+from batching.translate import Translate
 
 
 class Builder(object):
     def __init__(self,
                  storage,
-                 features,
-                 look_back,
-                 look_forward,
-                 n_seconds,
+                 translate,
                  batch_size=8192,
-                 normalize=True,
                  pseudo_stratify=False,
                  stratify_nbatch_groupings=50,
                  verbose=False,
                  seed=None,
                  n_workers=None):
+
         self.batch_size = batch_size
         self._stratify = pseudo_stratify
         self._stratify_max_groupings = stratify_nbatch_groupings
         self._verbose = verbose
 
-        self._features = features
-        self._look_forward = look_forward
-        self._look_back = look_back
-        self._n_timesteps = look_back + look_forward + 1
-        self._n_features = len(features)
-        self._n_seconds = n_seconds
         self._logger = logging.getLogger(__name__)
-        self._normalize = normalize
         self._n_workers = n_workers
-
         self._storage = storage
+
+        self.translate = translate
 
         if seed:
             np.random.seed(seed)
 
-        self.scaler = StandardScaler()
-
-    @staticmethod
-    def _remove_false_anchors(df, label):
-        anchors = df[label].rolling(3).apply(lambda x: x[0] == 0 and x[1] == 1 and x[2] == 0, raw=True)
-        anchors_idx = (np.where(anchors.values == 1)[0] - 1).tolist()
-        df.iloc[anchors_idx, df.columns.get_loc("y")] = 0
-        return df
-
-    def _nn_input_from_sessions(self, session_df):
-        valid_chunks = split_flat_df_by_time_gaps(session_df, self._n_seconds, self._look_back, self._look_forward)
-        if not valid_chunks:
-            return np.array([]).reshape((0, self._n_timesteps, self._n_features)), np.array([])
-
-        # reformat for sequence models based on window params
-        to_sequence = partial(feature_df_to_nn_input, self._features, self._look_back, self._look_forward)
-        sequences = list(map(to_sequence, valid_chunks))
-        train_data = np.concatenate(list(map(itemgetter(0), sequences)), axis=0)
-        train_truth = np.concatenate(list(map(itemgetter(1), sequences)), axis=0)
-        return train_data, train_truth
-
-    def _scale_and_transform_session(self, session_df):
-        clean_df = session_df.dropna().copy()
-        if self._normalize:
-            clean_df.loc[:, self._features] = self.scaler.transform(clean_df[self._features].astype('float64'))
-
-        clean_df = self._remove_false_anchors(clean_df, "y")
-        return self._nn_input_from_sessions(clean_df)
+    @property
+    def storage(self):
+        return self._storage
 
     def _generate_session_sequences(self, session_df_list):
         n_chunks = 50
         chunks = map(lambda i: islice(session_df_list, i, i + n_chunks), range(0, len(session_df_list), n_chunks))
         with ThreadPoolExecutor(max_workers=self._n_workers) as p:
-            for result in chain.from_iterable(map(lambda s: p.map(self._scale_and_transform_session, s), chunks)):
+            for result in chain.from_iterable(
+                    map(lambda s: p.map(self.translate.scale_and_transform_session, s), chunks)):
                 yield result
 
     def _imbalanced_minibatch_generator(self, X, y):
@@ -91,7 +58,7 @@ class Builder(object):
         ones_per_batch = int(self.batch_size - zeros_per_batch)
 
         if self._verbose:
-            self._logger.info("balancing {} batches from {} ones and {} zeros".format(n_batches, len(ones), len(zeros)))
+            self._logger.info(f"balancing {n_batches} batches {round(100 * (1 - zero_ratio), 2)}% ones")
         for i in range(n_batches):
             ones_idx = np.random.choice(ones, size=ones_per_batch, replace=False)
             zeros_idx = np.random.choice(zeros, size=zeros_per_batch, replace=False)
@@ -119,48 +86,29 @@ class Builder(object):
 
     def save_meta(self):
         params = {
-            'batch_size': self.batch_size,
-            'features': self._features,
-            'look_forward': self._look_forward,
-            'look_back': self._look_back,
-            'seconds_per_batch': self._n_seconds,
-            'normalized': self._normalize,
-            'mean': self.scaler.mean_.tolist() if self._normalize else [0] * len(self._features),
-            'std': self.scaler.scale_.tolist() if self._normalize else [1] * len(self._features),
+            'batch_size': self.batch_size
         }
+        params.update(self.translate.get_translate_params())
         self._storage.save_meta(params)
 
     def load_meta(self):
         params = self._storage.load_meta()
+        self.translate.set_translate_params(params)
         self.batch_size = params["batch_size"]
-        self._features = params["features"]
-        self._look_forward = params["look_forward"]
-        self._look_back = params["look_back"]
-        self._n_seconds = params["seconds_per_batch"]
-        self._normalize = params.get("normalized", True)
-        self.scaler.mean_ = np.array(params["mean"])
-        self.scaler.scale_ = np.array(params["std"])
-
-    def _normalize_dataset(self, session_df_list):
-        if self._verbose:
-            self._logger.info("Scaling data")
-        for session in session_df_list:
-            self.scaler.partial_fit(session[self._features].astype('float64'))
 
     def generate_batches(self, session_df_list):
         if not session_df_list or len(session_df_list) == 0:
             raise Exception("No dataset provided")
 
+        first = session_df_list[0].shape
+        total = reduce(add, [s.shape[0] for s in session_df_list])
+        dataset_shape = (total,) + first[1:]
         if self._verbose:
-            first = session_df_list[0].shape
-            total = reduce(add, [s.shape[0] for s in session_df_list])
-            dataset_shape = (total,) + first[1:]
             self._logger.info(f"Total dataset shape {dataset_shape}")
 
-        if self._normalize:
-            self._normalize_dataset(session_df_list)
+        self.translate.normalize_dataset(session_df_list)
 
-        X_rem = np.array([]).reshape((0, self._n_timesteps, self._n_features))
+        X_rem = np.array([]).reshape((0, self.translate.time_steps, self.translate.num_features))
         y_rem = np.array([])
 
         if self._verbose:
@@ -195,10 +143,91 @@ class Builder(object):
             self._storage.save(X_batch, y_batch)
             if self._verbose:
                 if perf_interval > 50:
-                    self._logger.info("Batch production rate: {} batches/s".format(
-                        round(50 / (time.perf_counter() - start), 2)))
+                    rate = round(50 / (time.perf_counter() - start), 2)
+                    self._logger.info(f"Batch production rate: {rate} batches/s")
                     start = time.perf_counter()
                     perf_interval = 0
                 perf_interval += 1
 
         self.save_meta()
+
+    @staticmethod
+    def file_builder_factory(directory,
+                             feature_set,
+                             look_back,
+                             look_forward,
+                             batch_size,
+                             batch_seconds=1,
+                             validation_split=0,
+                             pseudo_stratify=False,
+                             stratify_nbatch_groupings=20,
+                             n_workers=None,
+                             seed=None,
+                             normalize=True,
+                             verbose=False):
+
+        storage_meta = StorageMeta(validation_split=validation_split)
+        storage = BatchStorageFile(storage_meta, directory=directory)
+        translate = Translate(feature_set, look_back, look_forward, batch_seconds, normalize, verbose)
+        return Builder(storage=storage,
+                       translate=translate,
+                       batch_size=batch_size,
+                       pseudo_stratify=pseudo_stratify,
+                       stratify_nbatch_groupings=stratify_nbatch_groupings,
+                       verbose=verbose,
+                       seed=seed,
+                       n_workers=n_workers)
+
+    @staticmethod
+    def memory_builder_factory(feature_set,
+                               look_back,
+                               look_forward,
+                               batch_size,
+                               batch_seconds=1,
+                               validation_split=0,
+                               pseudo_stratify=False,
+                               stratify_nbatch_groupings=20,
+                               n_workers=None,
+                               seed=None,
+                               normalize=True,
+                               verbose=False):
+
+        storage_meta = StorageMeta(validation_split=validation_split)
+        storage = BatchStorageMemory(storage_meta)
+        translate = Translate(feature_set, look_back, look_forward, batch_seconds, normalize, verbose)
+        return Builder(storage=storage,
+                       translate=translate,
+                       batch_size=batch_size,
+                       pseudo_stratify=pseudo_stratify,
+                       stratify_nbatch_groupings=stratify_nbatch_groupings,
+                       verbose=verbose,
+                       seed=seed,
+                       n_workers=n_workers)
+
+    @staticmethod
+    def s3_builder_factory(s3_bucket_resource,
+                           feature_set,
+                           look_back,
+                           look_forward,
+                           batch_size,
+                           s3_prefix="",
+                           batch_seconds=1,
+                           validation_split=0,
+                           pseudo_stratify=False,
+                           stratify_nbatch_groupings=20,
+                           n_workers=None,
+                           seed=None,
+                           normalize=True,
+                           verbose=False):
+
+        storage_meta = StorageMeta(validation_split=validation_split)
+        storage = BatchStorageS3(storage_meta, s3_bucket_resource=s3_bucket_resource, s3_prefix=s3_prefix)
+        translate = Translate(feature_set, look_back, look_forward, batch_seconds, normalize, verbose)
+        return Builder(storage=storage,
+                       translate=translate,
+                       batch_size=batch_size,
+                       pseudo_stratify=pseudo_stratify,
+                       stratify_nbatch_groupings=stratify_nbatch_groupings,
+                       verbose=verbose,
+                       seed=seed,
+                       n_workers=n_workers)

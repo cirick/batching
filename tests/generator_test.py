@@ -17,16 +17,11 @@ def test_generator():
                                      "y": np.ones(32)})
                        for _ in range(1)]
 
-    look_back = 2
-    look_forward = 2
-    batch_seconds = 1
-
-    meta = StorageMeta()
-    storage = BatchStorageMemory(meta)
-    batch_generator = Builder(storage, feature_set, look_back, look_forward, batch_seconds, batch_size=16)
+    batch_generator = Builder.memory_builder_factory(feature_set, look_back=2, look_forward=2, batch_size=16,
+                                                     batch_seconds=1)
 
     batch_generator.generate_and_save_batches(feature_df_list)
-    train_generator = BatchGenerator(storage, is_validation=False, seed=42)
+    train_generator = BatchGenerator(batch_generator.storage, is_validation=False, seed=42)
 
     X, y = train_generator[0]
     tools.eq_(X.shape, (16, 5, 2))
@@ -42,16 +37,10 @@ def test_validation_gen():
                                      "y": np.ones(64)})
                        for _ in range(1)]
 
-    look_back = 0
-    look_forward = 0
-    batch_seconds = 1
-
-    meta = StorageMeta(validation_split=0.5)
-    storage = BatchStorageMemory(meta)
-    batch_generator = Builder(storage, feature_set, look_back, look_forward, batch_seconds, batch_size=8)
-
+    batch_generator = Builder.memory_builder_factory(feature_set, look_back=0, look_forward=0, batch_size=8,
+                                                     batch_seconds=1, validation_split=0.5)
     batch_generator.generate_and_save_batches(feature_df_list)
-    validation_generator = BatchGenerator(storage, is_validation=True)
+    validation_generator = BatchGenerator(batch_generator.storage, is_validation=True)
 
     X, y = validation_generator[0]
     tools.eq_(X.shape, (8, 1, 2))
@@ -68,20 +57,14 @@ def test_validation_gen_window():
                                      "y": np.ones(70)})
                        for _ in range(1)]
 
-    look_back = 6
-    look_forward = 0
-    batch_seconds = 1
-
-    meta = StorageMeta(validation_split=0.5)
-    storage = BatchStorageMemory(meta)
-    batch_generator = Builder(storage, feature_set, look_back, look_forward, batch_seconds, batch_size=8)
-
+    batch_generator = Builder.memory_builder_factory(feature_set, look_back=6, look_forward=0, batch_size=8,
+                                                     batch_seconds=1, validation_split=0.5)
     batch_generator.generate_and_save_batches(feature_df_list)
-    validation_generator = BatchGenerator(storage, is_validation=True)
+    validation_generator = BatchGenerator(batch_generator.storage, is_validation=True)
 
     X, y = validation_generator[0]
     tools.eq_(X.shape, (8, 7, 2))
-    tools.eq_(y.shape, (8, ))
+    tools.eq_(y.shape, (8,))
     tools.eq_(len([(x, y) for x, y in validation_generator]), 4)
     assert np.array_equal(X, np.zeros(X.shape))
 
@@ -95,18 +78,12 @@ def test_validation_gen_window_categorical():
                                      "y": np.ones(70)})
                        for _ in range(1)]
 
-    look_back = 6
-    look_forward = 0
-    batch_seconds = 1
-
-    meta = StorageMeta(validation_split=0.5)
-    storage = BatchStorageMemory(meta)
-    batch_generator = Builder(storage, feature_set, look_back, look_forward, batch_seconds, batch_size=8)
-
+    batch_generator = Builder.memory_builder_factory(feature_set, look_back=6, look_forward=0, batch_size=8,
+                                                     batch_seconds=1, validation_split=0.5)
     batch_generator.generate_and_save_batches(feature_df_list)
 
     n_categories = 4
-    validation_generator = BatchGenerator(storage, is_validation=True, n_classes=n_categories)
+    validation_generator = BatchGenerator(batch_generator.storage, is_validation=True, n_classes=n_categories)
 
     X, y = validation_generator[0]
     tools.eq_(X.shape, (8, 7, 2))

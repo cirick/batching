@@ -61,12 +61,7 @@ class BatchStorageMemory(BatchStorage):
             raise NoSavedMetaData()
 
         params = self.meta_data
-        params["train_map"] = {int(k): v for k, v in params["train_map"].items()}
-        params["val_map"] = {int(k): v for k, v in params["val_map"].items()}
-        self.meta.set_meta_params(train_ids=params["train_ids"],
-                                  train_map=params["train_map"],
-                                  validation_ids=params["val_ids"],
-                                  validation_map=params["val_map"])
+        self.meta.set_meta_params(params)
         return params
 
     def load(self, batch_id, validation=False):
@@ -111,12 +106,7 @@ class BatchStorageFile(BatchStorage):
         except FileNotFoundError:
             raise NoSavedMetaData()
 
-        params["train_map"] = {int(k): v for k, v in params["train_map"].items()}
-        params["val_map"] = {int(k): v for k, v in params["val_map"].items()}
-        self.meta.set_meta_params(train_ids=params["train_ids"],
-                                  train_map=params["train_map"],
-                                  validation_ids=params["val_ids"],
-                                  validation_map=params["val_map"])
+        self.meta.set_meta_params(params)
         return params
 
     def load(self, batch_id, validation=False):
@@ -159,12 +149,7 @@ class BatchStorageS3(BatchStorage):
         except ClientError:
             raise NoSavedMetaData()
 
-        params["train_map"] = {int(k): v for k, v in params["train_map"].items()}
-        params["val_map"] = {int(k): v for k, v in params["val_map"].items()}
-        self.meta.set_meta_params(train_ids=params["train_ids"],
-                                  train_map=params["train_map"],
-                                  validation_ids=params["val_ids"],
-                                  validation_map=params["val_map"])
+        self.meta.set_meta_params(params)
         return params
 
     def load(self, batch_id, validation=False):
