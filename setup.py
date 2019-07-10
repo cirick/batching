@@ -5,12 +5,12 @@ with open("README.md", "r") as fh:
 
 setup(
     name="batching",
-    version="1.0.0",
+    version="1.0.1",
     description="Batching is a set of tools to format data for training sequence models",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/cirick/batching",
-    download_url="https://github.com/cirick/batching/archive/v1.0.0.tar.gz",
+    download_url="https://github.com/cirick/batching/archive/v1.0.1.tar.gz",
     author="Charles Irick",
     author_email="cirick@gmail.com",
     include_package_data=True,

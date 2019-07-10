@@ -120,9 +120,9 @@ class Translate(object):
             self.scaler.partial_fit(session[self._features].astype('float64'))
 
     def scale_and_transform_session(self, session_df):
-        clean_df = session_df.dropna().copy()
+        clean_df = session_df[self._features + ["time", "y"]].dropna().copy()
         if self._normalize:
-            clean_df.loc[:, self._features] = self.scaler.transform(clean_df[self._features].astype('float64'))
+            clean_df.loc[:, self._features] = self.scaler.transform(clean_df[self._features])
 
         clean_df = self._remove_false_anchors(clean_df, "y")
         return self._nn_input_from_sessions(clean_df)
