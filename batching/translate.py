@@ -4,6 +4,38 @@ from sklearn.preprocessing import StandardScaler
 import logging
 
 
+def remove_false_anchors_factory(label):
+    def remove_false_anchors(df):
+        anchors = df[label].rolling(3).apply(lambda x: x[0] == 0 and x[1] == 1 and x[2] == 0, raw=True)
+        anchors_idx = (np.where(anchors.values == 1)[0] - 1).tolist()
+        if anchors_idx:
+            df.iloc[anchors_idx, df.columns.get_loc(label)] = 0
+        return df
+
+    return remove_false_anchors
+
+
+def split_flat_df_by_time_factory(look_back, look_forward, n_seconds):
+    def split_flat_df_by_time_gaps(df):
+        gap_idxs = np.where(np.diff(df["time"].values) != np.timedelta64(n_seconds, 's'))[0].tolist()
+        if not gap_idxs:
+            return [df]
+
+        start_idx = 0
+        valid_sections = []
+        for gap_idx in gap_idxs:
+            end_idx = gap_idx + 1
+            if df.iloc[start_idx:end_idx].shape[0] >= (look_back + look_forward + 1):
+                valid_sections.append(df.iloc[start_idx:end_idx])
+            start_idx = end_idx
+        if df.iloc[start_idx:].shape[0] >= (look_back + look_forward + 1):
+            valid_sections.append(df.iloc[start_idx:])
+
+        return valid_sections
+
+    return split_flat_df_by_time_gaps
+
+
 class Translate(object):
     def __init__(self,
                  features,
@@ -11,13 +43,15 @@ class Translate(object):
                  look_forward,
                  n_seconds=1,
                  normalize=True,
-                 verbose=False):
+                 verbose=False,
+                 custom_transforms=None):
         self._features = features
         self._look_forward = look_forward
         self._look_back = look_back
         self._n_features = len(features)
         self._n_seconds = n_seconds
         self._normalize = normalize
+        self._custom_transforms = custom_transforms
 
         self._verbose = verbose
         self._logger = logging.getLogger(__name__)
@@ -61,24 +95,6 @@ class Translate(object):
         self.scaler.mean_ = np.array(params["mean"])
         self.scaler.scale_ = np.array(params["std"])
 
-    @staticmethod
-    def _remove_false_anchors(df, label):
-        anchors = df[label].rolling(3).apply(lambda x: x[0] == 0 and x[1] == 1 and x[2] == 0, raw=True)
-        anchors_idx = (np.where(anchors.values == 1)[0] - 1).tolist()
-        df.iloc[anchors_idx, df.columns.get_loc("y")] = 0
-        return df
-
-    def _nn_input_from_sessions(self, session_df):
-        valid_chunks = self._split_flat_df_by_time_gaps(session_df)
-        if not valid_chunks:
-            return np.array([]).reshape((0, self.time_steps, self.num_features)), np.array([])
-
-        # reformat for sequence models based on window params
-        sequences = list(map(self._feature_df_to_nn_input, valid_chunks))
-        train_data = np.concatenate(list(map(itemgetter(0), sequences)), axis=0)
-        train_truth = np.concatenate(list(map(itemgetter(1), sequences)), axis=0)
-        return train_data, train_truth
-
     def _feature_df_to_nn_input(self, df):
         window_features = []
         x_start = self._look_back + self._look_forward
@@ -93,23 +109,6 @@ class Translate(object):
         # transpose: (n_features, n_seconds, look_back) -> (n_seconds, look_back, n_features)
         return np.stack(window_features).transpose((2, 1, 0)), df.iloc[y_start:y_end]["y"]
 
-    def _split_flat_df_by_time_gaps(self, df):
-        gap_idxs = np.where(np.diff(df["time"].values) != np.timedelta64(self._n_seconds, 's'))[0].tolist()
-        if not gap_idxs:
-            return [df]
-
-        start_idx = 0
-        valid_sections = []
-        for gap_idx in gap_idxs:
-            end_idx = gap_idx + 1
-            if df.iloc[start_idx:end_idx].shape[0] >= (self._look_back + self._look_forward + 1):
-                valid_sections.append(df.iloc[start_idx:end_idx])
-            start_idx = end_idx
-        if df.iloc[start_idx:].shape[0] >= (self._look_back + self._look_forward + 1):
-            valid_sections.append(df.iloc[start_idx:])
-
-        return valid_sections
-
     def normalize_dataset(self, session_df_list):
         if not self._normalize:
             return
@@ -117,12 +116,25 @@ class Translate(object):
         if self._verbose:
             self._logger.info("Scaling data")
         for session in session_df_list:
-            self.scaler.partial_fit(session[self._features].astype('float64'))
+            if session.shape[0] > 0:
+                self.scaler.partial_fit(session[self._features].astype('float64'))
 
     def scale_and_transform_session(self, session_df):
         clean_df = session_df[self._features + ["time", "y"]].dropna().copy()
         if self._normalize:
             clean_df.loc[:, self._features] = self.scaler.transform(clean_df[self._features])
 
-        clean_df = self._remove_false_anchors(clean_df, "y")
-        return self._nn_input_from_sessions(clean_df)
+        if self._custom_transforms:
+            for transform in self._custom_transforms:
+                clean_df = transform(clean_df)
+        else:
+            clean_df = [clean_df]
+
+        if not clean_df:
+            return np.array([]).reshape((0, self.time_steps, self.num_features)), np.array([])
+
+        # reformat for sequence models based on window params
+        sequences = list(map(self._feature_df_to_nn_input, clean_df))
+        train_data = np.concatenate(list(map(itemgetter(0), sequences)), axis=0)
+        train_truth = np.concatenate(list(map(itemgetter(1), sequences)), axis=0)
+        return train_data, train_truth

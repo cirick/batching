@@ -152,11 +152,11 @@ class Builder(object):
         self.save_meta()
 
     @staticmethod
-    def file_builder_factory(directory,
-                             feature_set,
+    def file_builder_factory(feature_set,
                              look_back,
                              look_forward,
                              batch_size,
+                             directory=None,
                              batch_seconds=1,
                              validation_split=0,
                              pseudo_stratify=False,
@@ -164,11 +164,13 @@ class Builder(object):
                              n_workers=None,
                              seed=None,
                              normalize=True,
+                             custom_transforms=None,
                              verbose=False):
 
         storage_meta = StorageMeta(validation_split=validation_split)
         storage = BatchStorageFile(storage_meta, directory=directory)
-        translate = Translate(feature_set, look_back, look_forward, batch_seconds, normalize, verbose)
+        translate = Translate(feature_set, look_back, look_forward, batch_seconds, normalize, verbose,
+                              custom_transforms)
         return Builder(storage=storage,
                        translate=translate,
                        batch_size=batch_size,
@@ -190,11 +192,13 @@ class Builder(object):
                                n_workers=None,
                                seed=None,
                                normalize=True,
+                               custom_transforms=None,
                                verbose=False):
 
         storage_meta = StorageMeta(validation_split=validation_split)
         storage = BatchStorageMemory(storage_meta)
-        translate = Translate(feature_set, look_back, look_forward, batch_seconds, normalize, verbose)
+        translate = Translate(feature_set, look_back, look_forward, batch_seconds, normalize, verbose,
+                              custom_transforms)
         return Builder(storage=storage,
                        translate=translate,
                        batch_size=batch_size,
@@ -218,11 +222,13 @@ class Builder(object):
                            n_workers=None,
                            seed=None,
                            normalize=True,
+                           custom_transforms=None,
                            verbose=False):
 
         storage_meta = StorageMeta(validation_split=validation_split)
         storage = BatchStorageS3(storage_meta, s3_bucket_resource=s3_bucket_resource, s3_prefix=s3_prefix)
-        translate = Translate(feature_set, look_back, look_forward, batch_seconds, normalize, verbose)
+        translate = Translate(feature_set, look_back, look_forward, batch_seconds, normalize, verbose,
+                              custom_transforms)
         return Builder(storage=storage,
                        translate=translate,
                        batch_size=batch_size,

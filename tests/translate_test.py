@@ -8,7 +8,7 @@ from operator import add
 from batching.builder import Builder
 from batching.storage import BatchStorageMemory
 from batching.storage_meta import StorageMeta
-from batching.translate import Translate
+from batching.translate import Translate, remove_false_anchors_factory, split_flat_df_by_time_factory
 
 
 def test_translate_config():
@@ -41,14 +41,20 @@ def test_translate_alone():
                            for _ in range(1)]
 
         for (look_back, look_forward) in [(3, 2), (1, 0)]:
+            custom_transforms = list()
+            custom_transforms.append(remove_false_anchors_factory("y"))
+            custom_transforms.append(split_flat_df_by_time_factory(look_back, look_forward, 1))
+
             translate = Translate(features=feature_set,
                                   look_back=look_back,
                                   look_forward=look_forward,
                                   n_seconds=1,
+                                  custom_transforms=custom_transforms,
                                   normalize=False)
+
             X, y = translate.scale_and_transform_session(feature_df_list[0])
-            tools.eq_(X.shape, (l-(look_back + look_forward), (look_back + look_forward + 1), 2))
-            tools.eq_(len(y), l-(look_back + look_forward))
+            tools.eq_(X.shape, (l - (look_back + look_forward), (look_back + look_forward + 1), 2))
+            tools.eq_(len(y), l - (look_back + look_forward))
 
             # first elements should slide forward in time one element at a time
             np.array_equal(X[:, 0, 0], np.array(list(range(l))))
@@ -66,10 +72,9 @@ def test_remove_anchors():
                        "y": y})
     df.index = df["time"]
 
-    translate = Translate(features=["A", "B"], look_back=0, look_forward=0, n_seconds=1)
-
     assert df["y"].any()
-    translate._remove_false_anchors(df, "y")
+    rfa = remove_false_anchors_factory("y")
+    df = rfa(df)
     assert not df["y"].any()
 
 
