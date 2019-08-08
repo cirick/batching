@@ -69,6 +69,27 @@ def test_validation_gen_window():
     assert np.array_equal(X, np.zeros(X.shape))
 
 
+def test_validation_gen_window_split():
+    feature_set = sorted(["A", "B"])
+
+    feature_df_list = [pd.DataFrame({"time": pd.to_datetime(list(range(70)), unit="s"),
+                                     "A": np.ones(70),
+                                     "B": np.ones(70),
+                                     "y": np.ones(70)})
+                       for _ in range(1)]
+
+    batch_generator = Builder.memory_builder_factory(feature_set, look_back=6, look_forward=0, batch_size=8,
+                                                     batch_seconds=1, validation_split=0.5)
+    batch_generator.generate_and_save_batches(feature_df_list)
+    validation_generator = BatchGenerator(batch_generator.storage, is_validation=True, batch_split=8)
+
+    X, y = validation_generator[0]
+    tools.eq_(X.shape, (1, 7, 2))
+    tools.eq_(y.shape, (1,))
+    tools.eq_(len([(x, y) for x, y in validation_generator]), 32)
+    assert np.array_equal(X, np.zeros(X.shape))
+
+
 def test_validation_gen_window_categorical():
     feature_set = sorted(["A", "B"])
 
