@@ -12,7 +12,7 @@ class StorageMeta(object):
 
         self._val_cadence = None
         if self._validation_split > 0:
-            self._val_cadence = 100 / (self._validation_split * 100)
+            self._val_cadence = int(100 // (self._validation_split * 100))
 
         self.train = BatchIds()
         self.validation = BatchIds()
