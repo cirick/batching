@@ -1,6 +1,6 @@
 import numpy as np
 from itertools import islice, chain
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 
 from functools import reduce
 from operator import add
@@ -44,7 +44,7 @@ class Builder(object):
     def _generate_session_sequences(self, session_df_list):
         n_chunks = 50
         chunks = map(lambda i: islice(session_df_list, i, i + n_chunks), range(0, len(session_df_list), n_chunks))
-        with ThreadPoolExecutor(max_workers=self._n_workers) as p:
+        with ProcessPoolExecutor(max_workers=self._n_workers) as p:
             for result in chain.from_iterable(
                     map(lambda s: p.map(self.translate.scale_and_transform_session, s), chunks)):
                 yield result

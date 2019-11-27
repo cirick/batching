@@ -1,85 +1,69 @@
 from batching.builder import Builder
 from batching.generator import BatchGenerator
 
+import pandas as pd
 import numpy as np
 import time
 import logging
 
-from eight_algos.DataUtils.DfConverter import feature_gen_file_to_df
-from concurrent.futures import ThreadPoolExecutor
-import pendulum
-import glob
+from datetime import datetime, timedelta
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Sample data config
+# 10k features + y per session
+n = 10000
+# Timestep spacing in seconds for features
+timesteps_seconds = 5
 
-class FeatureDfGenerator():
-    def __init__(self, ignore_features=[], filter_presence=None):
-        self._ignore_features = ignore_features
-        self._filter_presence = filter_presence
+# Generate a sample dataframe with 2 features and n timesteps
+now = datetime.utcnow().replace(microsecond=0)
+ts = pd.to_datetime([now + timedelta(seconds=i * timesteps_seconds) for i in range(n)])
+X = np.sin(np.linspace(1, n+1, n)) + np.random.normal(scale=0.1, size=n)
+y = np.random.randint(0, 2, n)
+session = pd.DataFrame({"feat1": X, "feat2": X, "y": y, "time": ts})
 
-    def batch_file_to_df(self, df_path):
-        return feature_gen_file_to_df('batch-', df_path, self._ignore_features, self._filter_presence)
+# Dataset consists of a certain number of sessions (sample 10)
+dataset = [session for _ in range(10)]
 
-    def seconds_file_to_df(self, df_path):
-        return feature_gen_file_to_df('seconds-', df_path, self._ignore_features, None)
-
-
-data_path = ""
-csv_path = data_path + "*.csv"
-
-feature_df_generator = FeatureDfGenerator()
-logger.info("Load Data")
-start = pendulum.now()
-with ThreadPoolExecutor() as p:
-    batch_sessions_df = p.map(feature_df_generator.batch_file_to_df, glob.glob(csv_path))
-logger.info("{}".format(pendulum.now().diff_for_humans(start)))
-
-batch_sessions_df = [df for df in batch_sessions_df if not df.empty]
-logger.info(len(batch_sessions_df))
-
-session_ids = [df['session_name'][0] for df in batch_sessions_df]
-session_map = {df['session_name'][0]: idx for idx, df in enumerate(batch_sessions_df)}
-
-asleep_sessions_df = list()
-for session in batch_sessions_df:
-    asleep_mask = np.where(np.logical_and(session["y"] < 4, session["y"] > 0))[0]
-    asleep_df = session.iloc[asleep_mask]
-    asleep_df.loc[:, "y"] -= 1
-    asleep_sessions_df.append(asleep_df)
-
+# Configuration for building batches
 file_batch_config = {
-    "directory": "test",
+    "directory": "cache",  # output directory
     "feature_set": sorted([
-        'active.log_int',
-        'active.range',
-        'active.var',
+        'feat1',
+        'feat2',
     ]),
-    "look_back": 120,
-    "look_forward": 60,
-    "batch_size": 4096,
-    "batch_seconds": 5,
-    "validation_split": 0.5,
-    "pseudo_stratify": True,
-    "stratify_nbatch_groupings": 100,
-    "n_workers": None,
-    "seed": 42,
-    "normalize": True,
-    "verbose": True
+    "look_back": 10,  # sequence model / RNN timesteps looking back
+    "look_forward": 10,  # sequence model / RNN timesteps looking forward (total window = look_back + look_forward + 1)
+    "batch_size": 32,  # size of training/val batches
+    "batch_seconds": timesteps_seconds,  # timestep size in seconds
+    "validation_split": 0.5,  # train/test split
+    "pseudo_stratify": True,  # stratify batches (done streaming so pseudo-stratification)
+    "stratify_nbatch_groupings": 500,  # number of batches to look at for stratification ratios
+    "n_workers": None,  # n_workers for ProcessPoolExecutor. None means ProcessPoolExecutor(n_workers=None) / default
+    "seed": 42,  # random seed for repeatability
+    "normalize": True,  # use StandardScaler to normalize features
+    "verbose": True  # debug logs
 }
+
+# Create builder for saving to files
 batch_generator = Builder.file_builder_factory(**file_batch_config)
 
+# Generate batches
 start = time.perf_counter()
-batch_generator.generate_and_save_batches(batch_sessions_df)
+batch_generator.generate_and_save_batches(dataset)
 logger.info(f"Total Duration: {time.perf_counter() - start}")
 
+# Train and validation generators that can be passed to tf/keras fit_generator
 train_generator = BatchGenerator(batch_generator.storage, is_validation=False)
 val_generator = BatchGenerator(batch_generator.storage, is_validation=True)
 
-train_batches = [batch for batch in train_generator]
-val_batches = [batch for batch in val_generator]
+# Consume in sample code for stats
+train_batches = list(train_generator)
+val_batches = list(val_generator)
 
 logger.info(f"num training batches: {len(train_batches)}, num validation batches: {len(val_batches)}")
 logger.info(f"training data shapes: {[train_batches[i][0].shape for i in range(3)]}, "
             f"validation data shapes: {[val_batches[i][0].shape for i in range(3)]}")
+logger.info(f"Batches location: ./{file_batch_config.get('directory')}")
