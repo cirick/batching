@@ -42,7 +42,7 @@ class Builder(object):
         return self._storage
 
     def _generate_session_sequences(self, session_df_list):
-        n_chunks = 150
+        n_chunks = 50
         chunks = map(lambda i: islice(session_df_list, i, i + n_chunks), range(0, len(session_df_list), n_chunks))
         with ThreadPoolExecutor(max_workers=self._n_workers) as p:
             for result in chain.from_iterable(
