@@ -22,7 +22,7 @@ now = datetime.utcnow().replace(microsecond=0)
 ts = pd.to_datetime([now + timedelta(seconds=i * timesteps_seconds) for i in range(n)])
 X = np.sin(np.linspace(1, n+1, n)) + np.random.normal(scale=0.1, size=n)
 y = np.random.randint(0, 2, n)
-session = pd.DataFrame({"feat1": X, "feat2": X, "y": y, "time": ts})
+session = pd.DataFrame({"feat1": X, "feat2": X, "feat3": X, "feat4": X, "y": y, "time": ts})
 
 # Dataset consists of a certain number of sessions (sample 10)
 dataset = [session for _ in range(10)]
@@ -33,14 +33,16 @@ file_batch_config = {
     "feature_set": sorted([
         'feat1',
         'feat2',
+        'feat3',
+        'feat4'
     ]),
-    "look_back": 10,  # sequence model / RNN timesteps looking back
-    "look_forward": 10,  # sequence model / RNN timesteps looking forward (total window = look_back + look_forward + 1)
-    "batch_size": 32,  # size of training/val batches
+    "look_back": 30,  # sequence model / RNN timesteps looking back
+    "look_forward": 30,  # sequence model / RNN timesteps looking forward (total window = look_back + look_forward + 1)
+    "batch_size": 1024,  # size of training/val batches
     "batch_seconds": timesteps_seconds,  # timestep size in seconds
     "validation_split": 0.5,  # train/test split
     "pseudo_stratify": True,  # stratify batches (done streaming so pseudo-stratification)
-    "stratify_nbatch_groupings": 500,  # number of batches to look at for stratification ratios
+    "stratify_nbatch_groupings": 10,  # number of batches to look at for stratification ratios
     "n_workers": None,  # n_workers for ProcessPoolExecutor. None means ProcessPoolExecutor(n_workers=None) / default
     "seed": 42,  # random seed for repeatability
     "normalize": True,  # use StandardScaler to normalize features

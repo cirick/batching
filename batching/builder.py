@@ -1,6 +1,6 @@
 import numpy as np
 from itertools import islice, chain
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 
 from functools import reduce
 from operator import add
@@ -42,28 +42,49 @@ class Builder(object):
         return self._storage
 
     def _generate_session_sequences(self, session_df_list):
-        n_chunks = 50
+        n_chunks = 150
         chunks = map(lambda i: islice(session_df_list, i, i + n_chunks), range(0, len(session_df_list), n_chunks))
-        with ProcessPoolExecutor(max_workers=self._n_workers) as p:
+        with ThreadPoolExecutor(max_workers=self._n_workers) as p:
             for result in chain.from_iterable(
                     map(lambda s: p.map(self.translate.scale_and_transform_session, s), chunks)):
                 yield result
 
     def _imbalanced_minibatch_generator(self, X, y):
         n_batches = int(X.shape[0] // self.batch_size)
-        ones = np.where(y == 1)[0]
-        zeros = np.where(y == 0)[0]
+
+        # Find ratio of ones to zeros, and how many to put in each batch
+        ones, zeros = np.where(y == 1)[0], np.where(y == 0)[0]
         zero_ratio = len(zeros) / float(len(ones) + len(zeros))
         zeros_per_batch = int(self.batch_size * zero_ratio)
         ones_per_batch = int(self.batch_size - zeros_per_batch)
 
         if self._verbose:
             self._logger.info(f"balancing {n_batches} batches {round(100 * (1 - zero_ratio), 2)}% ones")
-        for i in range(n_batches):
-            ones_idx = np.random.choice(ones, size=ones_per_batch, replace=False)
-            zeros_idx = np.random.choice(zeros, size=zeros_per_batch, replace=False)
-            selection = np.concatenate([ones_idx, zeros_idx])
-            yield (X[selection], y[selection])
+
+        # randomize the indices of ones and zeros and split them into amount needed per batch
+        np.random.shuffle(ones)
+        np.random.shuffle(zeros)
+        ones_batches = len(ones) // ones_per_batch if ones_per_batch else 0
+        zeros_batches = len(zeros) // zeros_per_batch if zeros_per_batch else 0
+        max_balanced_batches = min(ones_batches, zeros_batches)
+
+        # select balanced batches
+        if max_balanced_batches > 0:
+            ones_idx = np.split(ones[:ones_per_batch * max_balanced_batches], max_balanced_batches)
+            zeros_idx = np.split(zeros[:zeros_per_batch * max_balanced_batches], max_balanced_batches)
+
+            for i in range(max_balanced_batches):
+                selection = np.concatenate([ones_idx[i], zeros_idx[i]])
+                yield (X[selection], y[selection])
+
+        # remaining unbalanced batches
+        rem_ones = (ones_per_batch * (ones_batches - max_balanced_batches) +
+                    (len(ones) % ones_per_batch if ones_per_batch else 0))
+        rem_zeros = ((zeros_per_batch * (zeros_batches - max_balanced_batches) +
+                      (len(zeros) % zeros_per_batch if zeros_per_batch else 0)))
+        selection = np.concatenate([ones[-rem_ones:], zeros[-rem_zeros:]])
+        for rem_selection in np.split(selection, len(selection) // self.batch_size):
+            yield (X[rem_selection], y[rem_selection])
 
     def _pseudo_stratify_batches(self, session_df_list):
         X_group, y_group = [], []

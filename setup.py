@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name="batching",
-    version="1.0.5",
+    version="1.0.6",
     description="Batching is a set of tools to format data for training sequence models",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -17,11 +17,11 @@ setup(
     license="MIT",
     packages=["batching"],
     install_requires=[
-        "numpy>=1.16.3",
-        "pandas>=0.24.2",
-        "scikit-learn>=0.21.2",
-        "tensorflow>=1.13.1",
-        "boto3>=1.9.156"
+        "numpy>=1.17.4",
+        "pandas>=0.25.3",
+        "scikit-learn>=0.21.3",
+        "tensorflow>=2.0.0",
+        "boto3>=1.10.28"
     ],
     zip_safe=False,
 )

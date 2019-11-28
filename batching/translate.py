@@ -36,6 +36,15 @@ def split_flat_df_by_time_factory(look_back, look_forward, n_seconds):
     return split_flat_df_by_time_gaps
 
 
+def _roll(x, shift, wrap=True):
+    idx = shift % len(x)
+    if idx == 0:
+        return x
+    return (np.concatenate([x[-idx:], x[:-idx]])
+            if wrap else
+            np.concatenate([[np.nan] * idx, x[:-idx]]))
+
+
 class Translate(object):
     def __init__(self,
                  features,
@@ -96,18 +105,18 @@ class Translate(object):
         self.scaler.scale_ = np.array(params["std"])
 
     def _feature_df_to_nn_input(self, df):
-        window_features = []
         x_start = self._look_back + self._look_forward
         y_start = self._look_back
         y_end = len(df["y"]) - self._look_forward
 
-        for feature in self._features:
-            feature_df = df[feature]
-            ts_data = [feature_df.shift(i).values for i in range(self._look_back + self._look_forward, -1, -1)]
-            window_features.append(np.vstack(ts_data)[:, x_start:])
+        def _create_lags(feature_arr):
+            return np.array([_roll(feature_arr, i, wrap=False)[x_start:]
+                             for i in range(self._look_back + self._look_forward, -1, -1)])
+
+        window_features = np.array([_create_lags(df[feature].values) for feature in self._features])
 
         # transpose: (n_features, n_seconds, look_back) -> (n_seconds, look_back, n_features)
-        return np.stack(window_features).transpose((2, 1, 0)), df.iloc[y_start:y_end]["y"]
+        return window_features.transpose((2, 1, 0)), df.iloc[y_start:y_end]["y"]
 
     def normalize_dataset(self, session_df_list):
         if not self._normalize:
