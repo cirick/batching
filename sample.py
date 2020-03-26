@@ -39,6 +39,7 @@ file_batch_config = {
     "look_back": 30,  # sequence model / RNN timesteps looking back
     "look_forward": 30,  # sequence model / RNN timesteps looking forward (total window = look_back + look_forward + 1)
     "batch_size": 1024,  # size of training/val batches
+    "stride": 2,
     "batch_seconds": timesteps_seconds,  # timestep size in seconds
     "validation_split": 0.5,  # train/test split
     "pseudo_stratify": True,  # stratify batches (done streaming so pseudo-stratification)

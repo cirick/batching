@@ -1,3 +1,4 @@
+import math
 import pandas as pd
 import numpy as np
 from nose import tools
@@ -60,6 +61,44 @@ def test_translate_alone():
             np.array_equal(X[:, 0, 0], np.array(list(range(l))))
             # second elements should slide forward one at a time starting at 1
             np.array_equal(X[:, 1, 0], np.array(list(range(l))) + 1)
+
+
+def test_translate_stride():
+    feature_set = sorted(["A", "B"])
+
+    for stride in [1, 2, 5]:
+        for l in [32, 64, 128]:
+            feature_df_list = [pd.DataFrame({"time": pd.to_datetime(list(range(l)), unit="s"),
+                                             "A": np.array(list(range(l))),
+                                             "B": np.array(list(range(l))),
+                                             "y": np.ones(l)})
+                               for _ in range(1)]
+
+            for (look_back, look_forward) in [(3, 2), (1, 0)]:
+                custom_transforms = list()
+                custom_transforms.append(remove_false_anchors_factory("y"))
+                custom_transforms.append(split_flat_df_by_time_factory(look_back, look_forward, 1))
+
+                translate = Translate(features=feature_set,
+                                      look_back=look_back,
+                                      look_forward=look_forward,
+                                      n_seconds=1,
+                                      stride=stride,
+                                      custom_transforms=custom_transforms,
+                                      normalize=False)
+
+                X, y = translate.scale_and_transform_session(feature_df_list[0])
+
+                unstrided_len = (l - (look_back + look_forward))
+                n_examples_expected = math.ceil(unstrided_len / stride)
+
+                tools.eq_(X.shape, (n_examples_expected, (look_back + look_forward + 1), 2))
+                tools.eq_(len(y), n_examples_expected)
+
+                # first elements should slide forward in time one element at a time
+                np.array_equal(X[:, 0, 0], np.array(list(range(l))))
+                # second elements should slide forward one at a time starting at 1
+                np.array_equal(X[:, 1, 0], np.array(list(range(l))) + 1)
 
 
 def test_remove_anchors():

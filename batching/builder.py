@@ -179,6 +179,7 @@ class Builder(object):
                              batch_size,
                              directory=None,
                              batch_seconds=1,
+                             stride=1,
                              validation_split=0,
                              pseudo_stratify=False,
                              stratify_nbatch_groupings=20,
@@ -190,7 +191,7 @@ class Builder(object):
 
         storage_meta = StorageMeta(validation_split=validation_split)
         storage = BatchStorageFile(storage_meta, directory=directory)
-        translate = Translate(feature_set, look_back, look_forward, batch_seconds, normalize, verbose,
+        translate = Translate(feature_set, look_back, look_forward, batch_seconds, stride, normalize, verbose,
                               custom_transforms)
         return Builder(storage=storage,
                        translate=translate,
@@ -207,6 +208,7 @@ class Builder(object):
                                look_forward,
                                batch_size,
                                batch_seconds=1,
+                               stride=1,
                                validation_split=0,
                                pseudo_stratify=False,
                                stratify_nbatch_groupings=20,
@@ -218,7 +220,7 @@ class Builder(object):
 
         storage_meta = StorageMeta(validation_split=validation_split)
         storage = BatchStorageMemory(storage_meta)
-        translate = Translate(feature_set, look_back, look_forward, batch_seconds, normalize, verbose,
+        translate = Translate(feature_set, look_back, look_forward, batch_seconds, stride, normalize, verbose,
                               custom_transforms)
         return Builder(storage=storage,
                        translate=translate,
@@ -237,6 +239,7 @@ class Builder(object):
                            batch_size,
                            s3_prefix="",
                            batch_seconds=1,
+                           stride=1,
                            validation_split=0,
                            pseudo_stratify=False,
                            stratify_nbatch_groupings=20,
@@ -248,7 +251,7 @@ class Builder(object):
 
         storage_meta = StorageMeta(validation_split=validation_split)
         storage = BatchStorageS3(storage_meta, s3_bucket_resource=s3_bucket_resource, s3_prefix=s3_prefix)
-        translate = Translate(feature_set, look_back, look_forward, batch_seconds, normalize, verbose,
+        translate = Translate(feature_set, look_back, look_forward, batch_seconds, stride, normalize, verbose,
                               custom_transforms)
         return Builder(storage=storage,
                        translate=translate,
