@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name="batching",
-    version="1.0.8",
+    version="1.0.9",
     description="Batching is a set of tools to format data for training sequence models",
     long_description=long_description,
     long_description_content_type="text/markdown",

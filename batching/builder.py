@@ -83,7 +83,11 @@ class Builder(object):
         rem_zeros = ((zeros_per_batch * (zeros_batches - max_balanced_batches) +
                       (len(zeros) % zeros_per_batch if zeros_per_batch else 0)))
         selection = np.concatenate([ones[-rem_ones:], zeros[-rem_zeros:]])
+
+        even_split = len(selection) % self.batch_size
+        even_selection = selection[:-even_split] if even_split > 0 else selection
         for rem_selection in np.split(selection, len(selection) // self.batch_size):
+            print(len(rem_selection))
             yield (X[rem_selection], y[rem_selection])
 
     def _pseudo_stratify_batches(self, session_df_list):
