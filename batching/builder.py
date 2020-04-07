@@ -86,8 +86,7 @@ class Builder(object):
 
         even_split = len(selection) % self.batch_size
         even_selection = selection[:-even_split] if even_split > 0 else selection
-        for rem_selection in np.split(selection, len(selection) // self.batch_size):
-            print(len(rem_selection))
+        for rem_selection in np.split(even_selection, len(even_selection) // self.batch_size):
             yield (X[rem_selection], y[rem_selection])
 
     def _pseudo_stratify_batches(self, session_df_list):
