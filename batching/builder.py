@@ -190,12 +190,13 @@ class Builder(object):
                              seed=None,
                              normalize=True,
                              custom_transforms=None,
+                             session_norm_filter=None,
                              verbose=False):
 
         storage_meta = StorageMeta(validation_split=validation_split)
         storage = BatchStorageFile(storage_meta, directory=directory)
         translate = Translate(feature_set, look_back, look_forward, batch_seconds, stride, normalize, verbose,
-                              custom_transforms)
+                              custom_transforms, session_norm_filter)
         return Builder(storage=storage,
                        translate=translate,
                        batch_size=batch_size,
@@ -219,12 +220,13 @@ class Builder(object):
                                seed=None,
                                normalize=True,
                                custom_transforms=None,
+                               session_norm_filter=None,
                                verbose=False):
 
         storage_meta = StorageMeta(validation_split=validation_split)
         storage = BatchStorageMemory(storage_meta)
         translate = Translate(feature_set, look_back, look_forward, batch_seconds, stride, normalize, verbose,
-                              custom_transforms)
+                              custom_transforms, session_norm_filter)
         return Builder(storage=storage,
                        translate=translate,
                        batch_size=batch_size,
@@ -250,12 +252,13 @@ class Builder(object):
                            seed=None,
                            normalize=True,
                            custom_transforms=None,
+                           session_norm_filter=None,
                            verbose=False):
 
         storage_meta = StorageMeta(validation_split=validation_split)
         storage = BatchStorageS3(storage_meta, s3_bucket_resource=s3_bucket_resource, s3_prefix=s3_prefix)
         translate = Translate(feature_set, look_back, look_forward, batch_seconds, stride, normalize, verbose,
-                              custom_transforms)
+                              custom_transforms, session_norm_filter)
         return Builder(storage=storage,
                        translate=translate,
                        batch_size=batch_size,

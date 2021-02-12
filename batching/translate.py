@@ -54,7 +54,8 @@ class Translate(object):
                  stride=1,
                  normalize=True,
                  verbose=False,
-                 custom_transforms=None):
+                 custom_transforms=None,
+                 session_norm_filter=None):
         self._features = features
         self._look_forward = look_forward
         self._look_back = look_back
@@ -62,6 +63,7 @@ class Translate(object):
         self._n_seconds = n_seconds
         self._normalize = normalize
         self._custom_transforms = custom_transforms
+        self._session_norm_filter = session_norm_filter
         self._stride = stride
 
         self._verbose = verbose
@@ -114,8 +116,8 @@ class Translate(object):
         y_end = len(df["y"]) - self._look_forward
 
         def _create_lags(feature_arr):
-            return np.array([_roll(feature_arr, i, wrap=False)[x_start:] 
-                for i in range(self._look_back + self._look_forward, -1, -1)])[:, ::self._stride]
+            return np.array([_roll(feature_arr, i, wrap=False)[x_start:]
+                             for i in range(self._look_back + self._look_forward, -1, -1)])[:, ::self._stride]
 
         window_features = np.array([_create_lags(df[feature].values) for feature in self._features])
 
@@ -129,7 +131,11 @@ class Translate(object):
         if self._verbose:
             self._logger.info("Scaling data")
         for session in session_df_list:
-            if session.shape[0] > 0:
+            if session.shape[0] == 0:
+                continue
+
+            normalize_session = self._session_norm_filter(session) if self._session_norm_filter else True
+            if normalize_session:
                 self.scaler.partial_fit(session[self._features].astype('float64'))
 
     def scale_and_transform_session(self, session_df):

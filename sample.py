@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import time
 import logging
+import uuid
 
 from datetime import datetime, timedelta
 
@@ -20,12 +21,27 @@ timesteps_seconds = 5
 # Generate a sample dataframe with 2 features and n timesteps
 now = datetime.utcnow().replace(microsecond=0)
 ts = pd.to_datetime([now + timedelta(seconds=i * timesteps_seconds) for i in range(n)])
-X = np.sin(np.linspace(1, n+1, n)) + np.random.normal(scale=0.1, size=n)
+X = np.sin(np.linspace(1, n + 1, n)) + np.random.normal(scale=0.1, size=n)
 y = np.random.randint(0, 2, n)
 session = pd.DataFrame({"feat1": X, "feat2": X, "feat3": X, "feat4": X, "y": y, "time": ts})
+session["session_id"] = str(uuid.uuid4())
 
 # Dataset consists of a certain number of sessions (sample 10)
-dataset = [session for _ in range(10)]
+dataset = [session for _ in range(9)]
+
+# filter sessions with certain ID
+session_filt = session.copy()
+session_filt["session_id"] = 0
+dataset += [session_filt]
+
+
+def session_filter(session):
+    session_id = session["session_id"].iloc[0]
+    filter_session = session_id == 0
+    if filter_session:
+        logger.info(f"Filtering session {session_id}")
+    return filter_session
+
 
 # Configuration for building batches
 file_batch_config = {
@@ -47,6 +63,7 @@ file_batch_config = {
     "n_workers": None,  # n_workers for ProcessPoolExecutor. None means ProcessPoolExecutor(n_workers=None) / default
     "seed": 42,  # random seed for repeatability
     "normalize": True,  # use StandardScaler to normalize features
+    "session_norm_filter": session_filter,
     "verbose": True  # debug logs
 }
 
