@@ -52,6 +52,7 @@ class Translate(object):
                  look_forward,
                  n_seconds=1,
                  stride=1,
+                 sequence_labels=False,
                  normalize=True,
                  verbose=False,
                  custom_transforms=None,
@@ -65,6 +66,7 @@ class Translate(object):
         self._custom_transforms = custom_transforms
         self._session_norm_filter = session_norm_filter
         self._stride = stride
+        self._sequence_labels = sequence_labels
 
         self._verbose = verbose
         self._logger = logging.getLogger(__name__)
@@ -94,6 +96,7 @@ class Translate(object):
             'look_back': self._look_back,
             'seconds_per_batch': self._n_seconds,
             'stride': self._stride,
+            'sequence_labels': self._sequence_labels,
             'normalized': self._normalize,
             'mean': self.scaler.mean_.tolist() if self._normalize else [0] * len(self._features),
             'std': self.scaler.scale_.tolist() if self._normalize else [1] * len(self._features),
@@ -106,6 +109,7 @@ class Translate(object):
         self._look_back = params["look_back"]
         self._n_seconds = params["seconds_per_batch"]
         self._stride = params["stride"]
+        self._sequence_labels = params["sequence_labels"]
         self._normalize = params.get("normalized", True)
         self.scaler.mean_ = np.array(params["mean"])
         self.scaler.scale_ = np.array(params["std"])
@@ -119,10 +123,22 @@ class Translate(object):
             return np.array([_roll(feature_arr, i, wrap=False)[x_start:]
                              for i in range(self._look_back + self._look_forward, -1, -1)])[:, ::self._stride]
 
-        window_features = np.array([_create_lags(df[feature].values) for feature in self._features])
+        sequence_label = ["y"] if self._sequence_labels else []
+        columns = self._features + sequence_label
+        window_sequences = np.array([_create_lags(df[column].values) for column in columns])
 
-        # transpose: (n_features, n_seconds, look_back) -> (n_seconds, look_back, n_features)
-        return window_features.transpose((2, 1, 0)), df.iloc[y_start:y_end]["y"][::self._stride]
+        # transpose: (n_features, n_timesteps, n_seconds) -> (n_seconds, n_timesteps, n_features)
+        examples = window_sequences.transpose((2, 1, 0))
+
+        if not self._sequence_labels:
+            labels = df.iloc[y_start:y_end]["y"][::self._stride]
+        else:
+            # y was bundled in the window sequences to get the full sequence, unpack it
+            examples = examples[:, :, : -1]
+            # note y would already be strided in this case
+            labels = examples[:, :, -1]
+
+        return examples, labels
 
     def normalize_dataset(self, session_df_list):
         if not self._normalize:
